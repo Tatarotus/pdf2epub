@@ -1,0 +1,34 @@
+{
+  "page_number": 6,
+  "chapter_id": "ch01",
+  "is_chapter_start": false,
+  "content_type": "chapter_body",
+  "xhtml": "<p>reproduction. In an environment in which the primary food source might be nut-bearing trees or bushes, some finches with a particular shape of beak, for example, might be better able to crack nuts and get at their meat than finches with other shapes of beaks. More finches who have beaks better shaped for nut cracking survive than those with beaks poorly shaped for nut cracking.</p><p>An organism can survive for many years, however, and still not pass on its inherited qualities to future generations. To pass its inherited qualities to future generations, it must reproduce. Thus, <em>differential reproductive success</em>, brought about by the possession of heritable variants that increase or decrease an individual's chances of surviving and reproducing, is the \"bottom line\" of evolution by natural selection. Differential reproductive success or failure is defined by reproductive success relative to others. The characteristics of organisms that reproduce more than others, therefore, get passed down to future generations at a relatively greater frequency. Because survival is usually necessary for reproduction, it took on a critical role in Darwin's theory of natural selection.</p><h3>Darwin's Theory of Sexual Selection</h3><p>Darwin had a wonderful scientific habit of noticing facts that seemed inconsistent with his theories. He observed several that seemed to contradict his theory of natural selection, also called \"survival selection.\" First he noticed weird structures that seemed to have absolutely nothing to do with survival; the brilliant plumage of peacocks was a prime example. How could this strange luminescent structure possibly have evolved? The plumage is obviously metabolically costly to the animal. Furthermore, it seems like an open invitation to predators. Darwin became so obsessed with this apparent anomaly that he once commented, \"The sight of a feather in a peacock's tail, whenever I gaze at it makes me sick!\" (quoted in Cronin, 1991, p. 113). Darwin also observed that in some species, the sexes differed dramatically in size and structure. Why would the sexes differ so much, Darwin pondered, when both have essentially the same problems of survival, such as eating, fending off predators, and combating diseases?</p><p>Darwin's answers to these apparent embarrassments to the theory of natural selection was to devise a second evolutionary theory: the theory of <em>sexual selection</em>. In contrast to the theory of natural selection, which focused on adaptations that have arisen as a consequence of successful survival, the theory of sexual selection focused on adaptations that arose as a consequence of successful mating. Darwin envisioned two primary means by which sexual selection could operate. The first is <em>intrasexual competition</em>—competition between members of one sex, the outcomes of which contributed to mating access to the other sex. The prototype of intrasexual competition is two stags locking horns in combat. The victor gains</p>",
+  "images": [
+    {
+      "id": "img-p006-01",
+      "alt": "A peacock displaying its elaborate tail feathers",
+      "caption": "Darwin got sick at the sight of a peacock because, initially, the brilliant plumage seemed to have no obvious survival value and hence could not be explained by his original theory of natural selection. He eventually developed the theory of sexual selection, which could explain the peacock's plumage, and presumably he stopped getting sick when he witnessed one.",
+      "is_cover": false,
+      "bbox_hint": [
+        0.11,
+        0.48,
+        0.48,
+        0.78
+      ]
+    }
+  ],
+  "chrome_detected": [
+    {
+      "kind": "running_header",
+      "text": "The Scientific Movements Leading to Evolutionary Psychology"
+    },
+    {
+      "kind": "page_number",
+      "text": "6"
+    }
+  ],
+  "footnotes": [],
+  "confidence": 0.98,
+  "notes": "Single column text. One figure with caption on the left side. No footnotes on this page. Running header and page number stripped."
+}

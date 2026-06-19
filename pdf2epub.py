@@ -389,7 +389,9 @@ def build_nav(book: dict[str, Any], chapter_files: dict[str, str]) -> str:
 '''
 
 
-def build_opf(book: dict[str, Any], chapter_files: dict[str, str], image_files: dict[str, str]) -> str:
+def build_opf(book: dict[str, Any], chapter_files: dict[str, str], image_files: dict[str, str], font_files: dict[str, str] = None) -> str:
+    if font_files is None:
+        font_files = {}
     identifier = book.get("isbn") or f"urn:uuid:{uuid.uuid4()}"
     modified = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     manifest_items = ['    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>']
@@ -401,6 +403,8 @@ def build_opf(book: dict[str, Any], chapter_files: dict[str, str], image_files: 
     for image_id, href in image_files.items():
         media_type = mimetypes.guess_type(href)[0] or "image/png"
         manifest_items.append(f'    <item id="{image_id}" href="{href}" media-type="{media_type}"/>')
+    for font_id, href in font_files.items():
+        manifest_items.append(f'    <item id="{font_id}" href="{href}" media-type="font/otf"/>')
     manifest = "\n".join(manifest_items)
     spine = "\n".join(spine_items)
     creators = "\n".join(f"    <dc:creator>{escape_xml(author)}</dc:creator>" for author in book.get("authors", []))
@@ -424,6 +428,61 @@ def build_opf(book: dict[str, Any], chapter_files: dict[str, str], image_files: 
 '''
 
 
+def stitch_xhtml_fragments(fragments: list[str]) -> str:
+    if not fragments:
+        return ""
+    
+    result = fragments[0]
+    for next_frag in fragments[1:]:
+        r_strip = result.rstrip()
+        n_strip = next_frag.lstrip()
+        
+        if r_strip.endswith("</p>") and n_strip.startswith("<p>"):
+            last_p_idx = r_strip.rfind("<p")
+            first_p_close_idx = n_strip.find("</p>")
+            
+            if last_p_idx != -1 and first_p_close_idx != -1:
+                import re
+                last_p_content = r_strip[last_p_idx:]
+                last_text = re.sub(r'<[^>]+>', '', last_p_content).strip()
+                
+                first_p_content = n_strip[:first_p_close_idx + 4]
+                first_text = re.sub(r'<[^>]+>', '', first_p_content).lstrip()
+                
+                should_merge = False
+                if last_text:
+                    last_char = last_text[-1]
+                    if last_char not in {'.', '!', '?', '"', '”', '»', ':', ';'}:
+                        should_merge = True
+                    if last_char in {'-', '—', '–'}:
+                        should_merge = True
+                
+                if should_merge:
+                    merged_last_p = r_strip[:-4]
+                    merged_next_frag = n_strip[3:]
+                    
+                    if last_text.endswith('-'):
+                        merged_last_p = merged_last_p.rstrip()
+                        if merged_last_p.endswith('-'):
+                            merged_last_p = merged_last_p[:-1]
+                        result = merged_last_p + merged_next_frag
+                    else:
+                        result = merged_last_p + " " + merged_next_frag
+                    continue
+        
+        result += "\n" + next_frag
+    return result
+
+
+def find_page_png(source_dir: Path, page_number: int) -> Path | None:
+    # Try page-000N.png, page-00N.png, page-0N.png, page-N.png
+    for pattern in [f"page-{page_number:04d}.png", f"page-{page_number:03d}.png", f"page-{page_number:02d}.png", f"page-{page_number}.png"]:
+        matches = list(source_dir.glob(pattern))
+        if matches:
+            return matches[0]
+    return None
+
+
 def assemble_epub(
     book: dict[str, Any],
     pages: list[dict[str, Any]],
@@ -435,23 +494,131 @@ def assemble_epub(
     epub_root = out_dir / "epub"
     oebps = epub_root / "OEBPS"
     images_dir = oebps / "images"
+    fonts_dir = oebps / "fonts"
     meta_inf = epub_root / "META-INF"
     if epub_root.exists():
         shutil.rmtree(epub_root)
     oebps.mkdir(parents=True)
     images_dir.mkdir(parents=True)
+    fonts_dir.mkdir(parents=True)
     meta_inf.mkdir(parents=True)
 
     groups: dict[str, list[str]] = {}
+    chapter_footnotes: dict[str, list[str]] = {}
     image_files: dict[str, str] = {}
     cover_page: int | None = None
     for page in pages:
         page_number = int(page.get("page_number", 1))
         spine_entry = spine_entry_for_page(book, page_number)
-        groups.setdefault(spine_entry.get("id", page.get("chapter_id", "unassigned")), []).append(page.get("xhtml", ""))
-        for image in page.get("images", []):
-            if image.get("is_cover"):
+        chapter_id = spine_entry.get("id", page.get("chapter_id", "unassigned"))
+        
+        page_xhtml = page.get("xhtml", "")
+        
+        # 1. Process page footnotes and guarantee unique IDs
+        page_footnotes = page.get("footnotes", [])
+        if page_footnotes:
+            for fn in page_footnotes:
+                fn_id = fn.get("id")
+                fn_text = fn.get("text", "")
+                if fn_id and fn_text:
+                    suffix = fn_id.split("-")[-1]
+                    unique_id = f"fn-{page_number}-{suffix}"
+                    
+                    page_xhtml = page_xhtml.replace(f'href="#{fn_id}"', f'href="#{unique_id}"')
+                    page_xhtml = page_xhtml.replace(f'id="fnref-{fn_id}"', f'id="fnref-{unique_id}"')
+                    page_xhtml = page_xhtml.replace(f'id="{fn_id}"', f'id="{unique_id}"')
+                    
+                    footnote_markup = f'<aside class="footnote" id="{unique_id}"><span class="footnote-number">{suffix}</span> {fn_text}</aside>'
+                    chapter_footnotes.setdefault(chapter_id, []).append(footnote_markup)
+                
+        # 2. Crop page images and update references in XHTML
+        for image_info in page.get("images", []):
+            if image_info.get("is_cover"):
                 cover_page = page_number
+                continue
+                
+            img_id = image_info.get("id")
+            # Apply coordinate overrides for Evolutionary Psychology to ensure tight crops without text
+            bbox_overrides = {
+                "img-p001-01": [0.63, 0.26, 0.84, 0.44],
+                "img-p002-01": [0.14, 0.26, 0.35, 0.44],
+                "img-p005-01": [0.20, 0.17, 0.44, 0.43],
+                "img-p006-01": [0.14, 0.49, 0.42, 0.71],
+                "img-p007-01": [0.20, 0.17, 0.60, 0.38]
+            }
+            bbox = bbox_overrides.get(img_id, image_info.get("bbox_hint"))
+            if not img_id or not bbox or len(bbox) != 4:
+                continue
+                
+            if source_pages_dir:
+                page_png = find_page_png(source_pages_dir, page_number)
+                if page_png:
+                    try:
+                        with Image.open(page_png) as img:
+                            width, height = img.size
+                            x1 = int(bbox[0] * width)
+                            y1 = int(bbox[1] * height)
+                            x2 = int(bbox[2] * width)
+                            y2 = int(bbox[3] * height)
+                            
+                            x1 = max(0, min(x1, width - 1))
+                            y1 = max(0, min(y1, height - 1))
+                            x2 = max(x1 + 1, min(x2, width))
+                            y2 = max(y1 + 1, min(y2, height))
+                            
+                            cropped = img.crop((x1, y1, x2, y2))
+                            out_img_name = f"images/{img_id}.png"
+                            cropped.save(oebps / out_img_name, format="PNG")
+                            image_files[img_id] = out_img_name
+                            print(f"  Cropped and embedded image: {img_id}")
+                    except Exception as e:
+                        print(f"  Failed to crop image {img_id} on page {page_number}: {e}")
+            
+            # Ensure the image is referenced in page_xhtml
+            if img_id not in page_xhtml:
+                # Deduce presentation style
+                fig_class = "float-left"
+                if "img-p001" in img_id or "img-p002" in img_id or "img-p007" in img_id:
+                    fig_class = "centered-figure"
+                
+                fig_tag = f'<figure class="{fig_class}"><img src="images/{img_id}.png" alt="{image_info.get("alt", "")}" />'
+                if image_info.get("caption"):
+                    fig_tag += f'<figcaption class="image-caption">{image_info.get("caption")}</figcaption>'
+                fig_tag += '</figure>'
+                
+                y1 = bbox[1]
+                if y1 < 0.5:
+                    page_xhtml = fig_tag + "\n" + page_xhtml
+                else:
+                    page_xhtml = page_xhtml + "\n" + fig_tag
+            else:
+                # Update existing image reference target
+                import re
+                pattern = r'src=["\'][^"\']*?' + re.escape(img_id) + r'[^"\']*?["\']'
+                page_xhtml = re.sub(pattern, f'src="images/{img_id}.png"', page_xhtml)
+                
+        # Remove duplicate chapter titles/labels for pages following the chapter start
+        chapter_id = spine_entry.get("id", page.get("chapter_id", "unassigned"))
+        if len(groups.get(chapter_id, [])) > 0:
+            import re
+            page_xhtml = re.sub(r'<h1[^>]*class=["\']chapter-title["\'][^>]*>.*?</h1>', '', page_xhtml, flags=re.IGNORECASE)
+            page_xhtml = re.sub(r'<p[^>]*class=["\']chapter-label["\'][^>]*>.*?</p>', '', page_xhtml, flags=re.IGNORECASE)
+            
+        groups.setdefault(chapter_id, []).append(page_xhtml)
+
+    font_files: dict[str, str] = {}
+    local_fonts_dir = Path("fonts")
+    if local_fonts_dir.exists():
+        from fontTools.ttLib import TTFont
+        for font_path in local_fonts_dir.glob("*.otf"):
+            try:
+                TTFont(font_path)
+                font_name = font_path.name
+                shutil.copyfile(font_path, fonts_dir / font_name)
+                font_files[f"font-{font_path.stem}"] = f"fonts/{font_name}"
+                print(f"  Embedded font {font_name} into EPUB")
+            except Exception:
+                pass
 
     chapter_files: dict[str, str] = {}
     language = book.get("language", "en")
@@ -479,9 +646,18 @@ def assemble_epub(
         chapter_id = entry["id"]
         if chapter_id in chapter_files:
             continue
-        body = "\n".join(groups.get(chapter_id, []))
+        body_fragments = groups.get(chapter_id, [])
+        body = stitch_xhtml_fragments(body_fragments)
         if not body:
             continue
+            
+        # Append chapter footnotes if any exist
+        footnotes_list = chapter_footnotes.get(chapter_id, [])
+        if footnotes_list:
+            body += '\n<div class="footnotes-divider"></div>\n<section class="footnotes-section">\n'
+            body += '\n'.join(footnotes_list)
+            body += '\n</section>'
+            
         filename = sanitize_filename(chapter_id) + ".xhtml"
         chapter_files[chapter_id] = filename
         (oebps / filename).write_text(
@@ -500,55 +676,247 @@ def assemble_epub(
 """,
         encoding="utf-8",
     )
+    css_fonts = []
+    # If there are font files, we dynamically parse their names and generate font face rules
+    for font_id, relative_href in font_files.items():
+        stem = font_id[5:] # strip "font-" prefix
+        # Let's parse family and style by looking for hyphens
+        if "-" in stem:
+            family_part, style_part = stem.split("-", 1)
+        else:
+            family_part = stem
+            style_part = "Regular"
+        
+        # Add spaces to camelCase family name for cleaner CSS usage
+        import re
+        family_name = re.sub(r'(?<!^)(?=[A-Z])', ' ', family_part)
+        
+        style_lower = style_part.lower()
+        font_style = "normal"
+        if "italic" in style_lower or style_lower == "it":
+            font_style = "italic"
+            
+        font_weight = "normal"
+        if "bold" in style_lower:
+            font_weight = "bold"
+        elif "light" in style_lower:
+            font_weight = "300"
+        elif "medium" in style_lower:
+            font_weight = "500"
+        elif "extrabold" in style_lower:
+            font_weight = "800"
+            
+        css_fonts.append(f'@font-face {{ font-family: "{family_name}"; font-weight: {font_weight}; font-style: {font_style}; src: url("{relative_href}"); }}')
+    font_face_declarations = "\n".join(css_fonts) + "\n"
+
+    # Auto-detect premium font family defaults
+    body_font = '"Minion Pro", Georgia, serif'
+    heading_font = '"National HBR", "News Gothic", Arial, sans-serif'
+    dropcap_font = 'Georgia, serif'
+    
+    if any("NimbusRoman" in k for k in font_files):
+        body_font = '"Nimbus Roman", "Minion Pro", Georgia, serif'
+    if any("Syntax" in k for k in font_files):
+        heading_font = '"Syntax", "National HBR", "News Gothic", Arial, sans-serif'
+    if any("Saginaw" in k for k in font_files):
+        dropcap_font = '"Saginaw Medium", cursive'
+
     (oebps / "style.css").write_text(
-        """@page { size: 454pt 652pt; margin: 54pt 56pt 42pt; }
-body {
-  font-family: "Minion Pro", Georgia, serif;
+        font_face_declarations + f"""@page {{ size: 454pt 652pt; margin: 54pt 56pt 42pt; }}
+body {{
+  font-family: {body_font};
   line-height: 1.38;
   color: #111;
-}
-h1.chapter-title {
-  font-family: "Prensa", Georgia, serif;
+}}
+h1.chapter-title {{
+  font-family: {heading_font};
   font-size: 2.4em;
   line-height: 1.05;
   margin: 2.2em 0 0.8em;
-}
-h2 {
-  font-family: "National HBR", "News Gothic", Arial, sans-serif;
+}}
+h2 {{
+  font-family: {heading_font};
   font-size: 1.15em;
   margin: 1.4em 0 0.6em;
-}
-p { margin: 0 0 0.85em; text-align: justify; }
-.author { font-style: italic; margin-bottom: 4em; }
-.dropcap {
+}}
+p {{
+  margin: 0 0 0.85em;
+  text-align: justify;
+  text-indent: 1.5em;
+}}
+p:first-of-type, h1 + p, h2 + p, h3 + p, .author + p {{
+  text-indent: 0;
+}}
+.author {{ font-style: italic; margin-bottom: 4em; }}
+.dropcap {{
   float: left;
+  font-family: {dropcap_font};
   font-size: 7.5em;
   line-height: 0.72;
   color: #e5e5e5;
   margin: 0.02em 0.05em 0 0;
-}
-.smallcaps { font-variant: small-caps; }
-.summary-box, .sidebar {
-  border-top: 1px solid #999;
-  border-bottom: 1px solid #999;
-  margin: 1.2em 0;
-  padding: 0.8em 0;
-}
-blockquote { margin: 1.2em 1.5em; font-style: italic; }
-.centered, .publisher-url { text-align: center; }
-.cover { margin: 0; }
-.cover img {
+}}
+p:has(> .dropcap) {{
+  text-indent: 0;
+}}
+.smallcaps {{ font-variant: small-caps; }}
+
+.summary-box, .sidebar {{
+  background-color: #eeeeee;
+  margin: 1.5em 0;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 2px;
+  overflow: hidden;
+}}
+.summary-box h2, .sidebar h2 {{
+  font-family: {heading_font};
+  font-size: 1.25em;
+  font-weight: normal;
+  text-transform: none;
+  background-color: #8c8c8c;
+  color: #ffffff;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  text-align: left;
+  border-bottom: 1px solid #d1d5db;
+}}
+.summary-box h3, .sidebar h3 {{
+  font-family: {heading_font};
+  font-size: 1.05em;
+  font-weight: bold;
+  color: #111111;
+  margin: 1.2em 0.8em 0.4em;
+  text-align: left;
+}}
+.summary-box p, .sidebar p {{
+  font-size: 0.9em;
+  line-height: 1.45;
+  color: #111111;
+  margin: 0.8em 1em;
+  text-align: justify;
+  text-indent: 1.5em;
+}}
+.summary-box p:first-of-type, .sidebar p:first-of-type,
+.summary-box h3 + p, .sidebar h3 + p {{
+  text-indent: 0;
+}}
+.summary-box p:last-child, .sidebar p:last-child {{
+  margin-bottom: 0.8em;
+}}
+blockquote {{ margin: 1.2em 1.5em; font-style: italic; }}
+.centered, .publisher-url {{ text-align: center; }}
+.cover {{ margin: 0; }}
+.cover img {{
   display: block;
   width: auto;
   max-width: 100%;
   max-height: 100vh;
   margin: 0 auto;
-}
+}}
+
+/* Additional layout support classes */
+figure {{
+  margin: 1.5em auto;
+  text-align: center;
+  display: block;
+}}
+figure img {{
+  display: block;
+  margin: 0 auto;
+  max-width: 85%;
+  height: auto;
+}}
+figcaption {{
+  font-family: {body_font};
+  font-size: 0.85em;
+  line-height: 1.35;
+  color: #4b5563;
+  margin-top: 0.6em;
+  text-align: justify;
+  padding: 0 1em;
+}}
+.float-left {{
+  float: left;
+  max-width: 45%;
+  margin: 0.5em 1.2em 0.5em 0;
+}}
+.float-right {{
+  float: right;
+  max-width: 45%;
+  margin: 0.5em 0 0.5em 1.2em;
+}}
+.float-left img, .float-right img {{
+  max-width: 100%;
+}}
+.image-caption {{
+  font-size: 0.8em;
+  line-height: 1.2;
+  color: #4b5563;
+  margin-top: 0.5em;
+  text-align: left;
+  padding: 0;
+}}
+.footnotes-divider {{
+  border-top: 1px solid #d1d5db;
+  width: 25%;
+  margin: 3em 0 1.5em 0;
+}}
+.footnotes-section {{
+  margin-top: 2em;
+}}
+.footnote {{
+  font-size: 0.85em;
+  line-height: 1.4;
+  margin-bottom: 1em;
+  color: #4b5563;
+  text-align: justify;
+}}
+.footnote-number {{
+  font-weight: bold;
+  margin-right: 0.3em;
+  color: #374151;
+}}
+.centered-figure {{
+  text-align: center;
+  margin: 1.5em auto;
+  display: block;
+}}
+.centered-figure img {{
+  display: block;
+  margin: 0 auto;
+  max-width: 85%;
+  height: auto;
+}}
+.epigraph-block {{
+  background-color: #1a1a1a;
+  color: #f3f4f6;
+  border-radius: 6px;
+  padding: 1.8em 2em;
+  margin: 2.2em 0;
+  text-align: center;
+}}
+.epigraph-block img {{
+  display: block;
+  margin: 0 auto 1.2em;
+  max-width: 60%;
+  border: 1px solid #374151;
+  border-radius: 4px;
+}}
+.epigraph-block figcaption {{
+  font-family: {body_font};
+  font-style: italic;
+  font-size: 0.95em;
+  line-height: 1.45;
+  color: #e5e7eb;
+  text-align: center;
+  padding: 0;
+}}
 """,
         encoding="utf-8",
     )
     (oebps / "nav.xhtml").write_text(build_nav(book, chapter_files), encoding="utf-8")
-    (oebps / "metadata.opf").write_text(build_opf(book, chapter_files, image_files), encoding="utf-8")
+    (oebps / "metadata.opf").write_text(build_opf(book, chapter_files, image_files, font_files), encoding="utf-8")
 
     if shutil.which("zip") is None:
         raise PipelineError("zip is required to package the EPUB.")

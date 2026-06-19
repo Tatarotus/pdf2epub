@@ -1,0 +1,34 @@
+{
+  "page_number": 7,
+  "chapter_id": "ch01",
+  "is_chapter_start": false,
+  "content_type": "chapter_body",
+  "xhtml": "<figure><img src=\"img-p007-01.jpg\" alt=\"A stag with large antlers standing in a grassy field\"/><figcaption>Stags locking horns in combat is a form of sexual selection called intrasexual competition. The qualities that lead to success in these same-sex combats get passed on in greater numbers to succeeding generations because the victors gain increased mating access to members of the opposite sex.</figcaption></figure><p>sexual access to a female either directly or through controlling territory or resources desired by the female. The loser typically fails to mate. Whatever qualities lead to success in the same-sex contests, such as greater size, strength, or athletic ability, will be passed on to the next generation by virtue of the mating success of the victors. Qualities that are linked with losing fail to get passed on. So evolution—change over time—can occur simply as a consequence of intrasexual competition.</p><p>The second means by which sexual selection could operate is <em>intersexual selection</em>, or preferential mate choice. If members of one sex have some consensus about the qualities that are desired in members of the opposite sex, then individuals of the opposite sex who possess those qualities will be preferentially chosen as mates. Those who have the desired qualities fail to get mates. In this case, evolutionary change occurs simply because the qualities that are desired in a mate increase in frequency with the passing of each generation. If females prefer to mate with males who give them nuptial gifts, for example, then males with qualities that lead to success in acquiring nuptial gifts will increase in frequency over time. Darwin called the process of intersexual selection <em>female choice</em> because he observed that throughout the animal world, females of many species were discriminating or choosy about whom they mated with.</p><p>Darwin's theory of sexual selection succeeded in explaining the anomalies that worried him. The peacock's tail, for example, evolved because of the process of intersexual selection: Peahens prefer to mate with males who have the most brilliant and luminescent plumage. Males are often larger than females in species in which males engage in physical combat with other males for sexual access to females—the process of intrasexual competition.</p><h2>The Role of Natural Selection and Sexual Selection in Evolutionary Theory</h2><p>Darwin's theories of natural and sexual selection are relatively simple to describe, but many sources of confusion surround them even to this day. This section clarifies those important aspects of selection and its place in understanding evolution.</p>",
+  "images": [
+    {
+      "id": "img-p007-01",
+      "alt": "A stag with large antlers standing in a grassy field",
+      "caption": "Stags locking horns in combat is a form of sexual selection called intrasexual competition. The qualities that lead to success in these same-sex combats get passed on in greater numbers to succeeding generations because the victors gain increased mating access to members of the opposite sex.",
+      "is_cover": false,
+      "bbox_hint": [
+        0.18,
+        0.18,
+        0.58,
+        0.38
+      ]
+    }
+  ],
+  "chrome_detected": [
+    {
+      "kind": "running_header",
+      "text": "The Scientific Movements Leading to Evolutionary Psychology"
+    },
+    {
+      "kind": "page_number",
+      "text": "7"
+    }
+  ],
+  "footnotes": [],
+  "confidence": 0.96,
+  "notes": "Single column layout. Figure with caption at top. Section heading H2 detected. No footnotes on this page."
+}

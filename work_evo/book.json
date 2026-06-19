@@ -1,0 +1,40 @@
+{
+  "title": "The Scientific Movements Leading to Evolutionary Psychology",
+  "subtitle": null,
+  "authors": [
+    "David M. Buss"
+  ],
+  "language": "en",
+  "direction": "ltr",
+  "publisher": "Pearson Education, Inc.",
+  "published_year": 2015,
+  "isbn": null,
+  "description": "An academic text exploring the historical scientific developments that contributed to the field of evolutionary psychology.",
+  "spine": [
+    {
+      "id": "ch01",
+      "title": "The Scientific Movements Leading to Evolutionary Psychology",
+      "first_page": 1,
+      "kind": "chapter",
+      "running_header": "The Scientific Movements Leading to Evolutionary Psychology",
+      "notes": "Chapter 1 starts on page 1. No separate front matter (cover, title page, TOC) detected in the provided sample set."
+    }
+  ],
+  "conventions": {
+    "has_running_headers": true,
+    "has_page_numbers": true,
+    "page_number_position": "bottom_center",
+    "has_drop_caps": true,
+    "has_two_column": false,
+    "has_footnotes": true,
+    "footnote_style": "numbered_per_chapter",
+    "first_page_number_visible": 1
+  },
+  "extraction_warnings": [
+    "Page 1 and 2 feature a distinctive two-tone layout with a black vertical bar containing an illustration and quote; ensure this is treated as layout, not separate content.",
+    "Small print on page 1 indicates this is an excerpt from 'Evolutionary Psychology: The New Science of the Mind, Fourth Edition'; metadata should reflect the source book if available.",
+    "Footnotes appear at the bottom of pages (e.g., page 3); ensure they are captured as <aside class='footnote'>."
+  ],
+  "confidence": 0.92,
+  "notes": "Spine inferred from provided pages 1-7, which constitute the beginning of Chapter 1. No other chapters or front/back matter units were visible in the sample set."
+}

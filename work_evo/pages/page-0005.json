@@ -1,0 +1,39 @@
+{
+  "page_number": 5,
+  "chapter_id": "ch01",
+  "is_chapter_start": false,
+  "content_type": "chapter_body",
+  "xhtml": "<figure><img src=\"img-p005-01.jpg\" alt=\"Portrait of Charles Darwin\" /><figcaption>Charles Darwin created a scientific revolution in biology with his theory of natural selection. His book On the Origin of Species (1859) is packed with theoretical arguments and detailed empirical data that he amassed over the twenty-five years prior to the book's publication.</figcaption></figure><p>actually varied so much that they constituted different species. Indeed, each island in the Galápagos had a distinct species of finch. Darwin determined that these different finches had a common ancestor but had diverged from each other because of the local ecological conditions on each island. This geographic variation was pivotal to Darwin's conclusion that species are not immutable but can change over time.</p><p>What could account for why species change? Darwin struggled with several different theories of the origins of change, but rejected all of them because they failed to explain a critical fact: the existence of adaptations. Darwin wanted to account for change, of course, but he also wanted to account for why organisms appeared so well designed for their local environments.</p><p>In . . . evident that [these other theories] could [not] account for the innumerable cases in which organisms of every kind are beautifully adapted to their habits of life—for instance, a woodpecker or tree-frog to climb trees, or a seed for dispersal by hooks and plumes. I had always been much struck by such adaptations, and until these could be explained it seemed to me almost useless to endeavour to prove by indirect evidence that species have been modified. (Darwin, from his autobiography; cited in Ridley, 1996, p. 9)</p><p>Darwin unearthed a key to the puzzle of adaptations in Thomas Malthus's <em>An Essay on the Principle of Population</em> (published in 1798), which introduced Darwin to the notion that organisms exist in numbers far greater than can survive and reproduce. The result must be a \"struggle for existence,\" in which favorable variations tend to be preserved and unfavorable ones tend to die out. When this process is repeated generation after generation, the end result is the formation of new adaptation.</p><p>More formally, Darwin's answer to all these puzzles of life was the theory of <em>natural selection</em> and its three essential ingredients: <em>variation</em>, <em>inheritance</em>, and <em>selection</em>. First, organisms vary in all sorts of ways, such as in wing length, trunk strength, bone mass, cell structure, fighting ability, defensive ability, and social cunning. Variation is essential for the process of evolution to operate—it provides the \"raw materials\" for evolution.</p><p>Second, only some of these variations are inherited—that is, passed down reliably from parents to their offspring, which then pass them on to their offspring down through the generations. Other variations, such as a wing deformity caused by an environmental accident, are not inherited by offspring. Only those variations that are inherited play a role in the evolutionary process.</p><p>The third critical ingredient of Darwin's theory is <em>selection</em>. Organisms with some heritable variants leave more offspring because those attributes help with the tasks of survival or</p>",
+  "images": [
+    {
+      "id": "img-p005-01",
+      "alt": "Portrait of Charles Darwin",
+      "caption": "Charles Darwin created a scientific revolution in biology with his theory of natural selection. His book On the Origin of Species (1859) is packed with theoretical arguments and detailed empirical data that he amassed over the twenty-five years prior to the book's publication.",
+      "is_cover": false,
+      "bbox_hint": [
+        0.12,
+        0.18,
+        0.42,
+        0.52
+      ]
+    }
+  ],
+  "chrome_detected": [
+    {
+      "kind": "running_header",
+      "text": "The Scientific Movements Leading to Evolutionary Psychology"
+    },
+    {
+      "kind": "page_number",
+      "text": "5"
+    }
+  ],
+  "footnotes": [
+    {
+      "id": "fn-1",
+      "text": "The theory of natural selection was discovered independently by Alfred Russel Wallace (Wallace, 1858). Darwin and Wallace co-presented the theory at a meeting of the Linnean Society."
+    }
+  ],
+  "confidence": 0.96,
+  "notes": "Single column layout. Figure on left with caption. Text flows around figure. Footnote at bottom. Running header at top. Page number at bottom right."
+}

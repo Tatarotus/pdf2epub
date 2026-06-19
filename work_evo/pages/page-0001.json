@@ -1,0 +1,30 @@
+{
+  "page_number": 1,
+  "chapter_id": "ch01",
+  "is_chapter_start": true,
+  "content_type": "chapter_start",
+  "xhtml": "<h1 class=\"chapter-title\">THE SCIENTIFIC MOVEMENTS LEADING TO EVOLUTIONARY PSYCHOLOGY</h1><p class=\"copyright\">From Chapter 1 of <em>Evolutionary Psychology: The New Science of the Mind</em>, Fourth Edition. David M. Buss. Copyright © 2012 by Pearson Education, Inc. Published by Pearson Allyn & Bacon. All rights reserved.</p>",
+  "images": [
+    {
+      "id": "img-p001-01",
+      "alt": "Abstract black and white illustration of biological forms",
+      "caption": null,
+      "is_cover": false,
+      "bbox_hint": [
+        0.62,
+        0.32,
+        0.88,
+        0.52
+      ]
+    }
+  ],
+  "chrome_detected": [
+    {
+      "kind": "page_number",
+      "text": "1"
+    }
+  ],
+  "footnotes": [],
+  "confidence": 0.98,
+  "notes": "Chapter start page with distinctive two-tone layout. Black vertical bar on right contains illustration. Copyright text at bottom left."
+}

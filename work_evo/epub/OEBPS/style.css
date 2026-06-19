@@ -1,0 +1,195 @@
+@font-face { font-family: "Nimbus Roman"; font-weight: normal; font-style: italic; src: url("fonts/NimbusRoman-Italic.otf"); }
+@font-face { font-family: "Nimbus Roman"; font-weight: normal; font-style: normal; src: url("fonts/NimbusRoman-Regular.otf"); }
+@font-face { font-family: "Syntax"; font-weight: bold; font-style: normal; src: url("fonts/Syntax-Bold.otf"); }
+@font-face { font-family: "Syntax"; font-weight: normal; font-style: normal; src: url("fonts/Syntax-Roman.otf"); }
+@font-face { font-family: "Saginaw Medium"; font-weight: normal; font-style: normal; src: url("fonts/SaginawMedium.otf"); }
+@page { size: 454pt 652pt; margin: 54pt 56pt 42pt; }
+body {
+  font-family: "Nimbus Roman", "Minion Pro", Georgia, serif;
+  line-height: 1.38;
+  color: #111;
+}
+h1.chapter-title {
+  font-family: "Syntax", "National HBR", "News Gothic", Arial, sans-serif;
+  font-size: 2.4em;
+  line-height: 1.05;
+  margin: 2.2em 0 0.8em;
+}
+h2 {
+  font-family: "Syntax", "National HBR", "News Gothic", Arial, sans-serif;
+  font-size: 1.15em;
+  margin: 1.4em 0 0.6em;
+}
+p {
+  margin: 0 0 0.85em;
+  text-align: justify;
+  text-indent: 1.5em;
+}
+p:first-of-type, h1 + p, h2 + p, h3 + p, .author + p {
+  text-indent: 0;
+}
+.author { font-style: italic; margin-bottom: 4em; }
+.dropcap {
+  float: left;
+  font-family: "Saginaw Medium", cursive;
+  font-size: 7.5em;
+  line-height: 0.72;
+  color: #e5e5e5;
+  margin: 0.02em 0.05em 0 0;
+}
+p:has(> .dropcap) {
+  text-indent: 0;
+}
+.smallcaps { font-variant: small-caps; }
+
+.summary-box, .sidebar {
+  background-color: #eeeeee;
+  margin: 1.5em 0;
+  padding: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.summary-box h2, .sidebar h2 {
+  font-family: "Syntax", "National HBR", "News Gothic", Arial, sans-serif;
+  font-size: 1.25em;
+  font-weight: normal;
+  text-transform: none;
+  background-color: #8c8c8c;
+  color: #ffffff;
+  margin: 0;
+  padding: 0.5em 0.8em;
+  text-align: left;
+  border-bottom: 1px solid #d1d5db;
+}
+.summary-box h3, .sidebar h3 {
+  font-family: "Syntax", "National HBR", "News Gothic", Arial, sans-serif;
+  font-size: 1.05em;
+  font-weight: bold;
+  color: #111111;
+  margin: 1.2em 0.8em 0.4em;
+  text-align: left;
+}
+.summary-box p, .sidebar p {
+  font-size: 0.9em;
+  line-height: 1.45;
+  color: #111111;
+  margin: 0.8em 1em;
+  text-align: justify;
+  text-indent: 1.5em;
+}
+.summary-box p:first-of-type, .sidebar p:first-of-type,
+.summary-box h3 + p, .sidebar h3 + p {
+  text-indent: 0;
+}
+.summary-box p:last-child, .sidebar p:last-child {
+  margin-bottom: 0.8em;
+}
+blockquote { margin: 1.2em 1.5em; font-style: italic; }
+.centered, .publisher-url { text-align: center; }
+.cover { margin: 0; }
+.cover img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100vh;
+  margin: 0 auto;
+}
+
+/* Additional layout support classes */
+figure {
+  margin: 1.5em auto;
+  text-align: center;
+  display: block;
+}
+figure img {
+  display: block;
+  margin: 0 auto;
+  max-width: 85%;
+  height: auto;
+}
+figcaption {
+  font-family: "Nimbus Roman", "Minion Pro", Georgia, serif;
+  font-size: 0.85em;
+  line-height: 1.35;
+  color: #4b5563;
+  margin-top: 0.6em;
+  text-align: justify;
+  padding: 0 1em;
+}
+.float-left {
+  float: left;
+  max-width: 45%;
+  margin: 0.5em 1.2em 0.5em 0;
+}
+.float-right {
+  float: right;
+  max-width: 45%;
+  margin: 0.5em 0 0.5em 1.2em;
+}
+.float-left img, .float-right img {
+  max-width: 100%;
+}
+.image-caption {
+  font-size: 0.8em;
+  line-height: 1.2;
+  color: #4b5563;
+  margin-top: 0.5em;
+  text-align: left;
+  padding: 0;
+}
+.footnotes-divider {
+  border-top: 1px solid #d1d5db;
+  width: 25%;
+  margin: 3em 0 1.5em 0;
+}
+.footnotes-section {
+  margin-top: 2em;
+}
+.footnote {
+  font-size: 0.85em;
+  line-height: 1.4;
+  margin-bottom: 1em;
+  color: #4b5563;
+  text-align: justify;
+}
+.footnote-number {
+  font-weight: bold;
+  margin-right: 0.3em;
+  color: #374151;
+}
+.centered-figure {
+  text-align: center;
+  margin: 1.5em auto;
+  display: block;
+}
+.centered-figure img {
+  display: block;
+  margin: 0 auto;
+  max-width: 85%;
+  height: auto;
+}
+.epigraph-block {
+  background-color: #1a1a1a;
+  color: #f3f4f6;
+  border-radius: 6px;
+  padding: 1.8em 2em;
+  margin: 2.2em 0;
+  text-align: center;
+}
+.epigraph-block img {
+  display: block;
+  margin: 0 auto 1.2em;
+  max-width: 60%;
+  border: 1px solid #374151;
+  border-radius: 4px;
+}
+.epigraph-block figcaption {
+  font-family: "Nimbus Roman", "Minion Pro", Georgia, serif;
+  font-style: italic;
+  font-size: 0.95em;
+  line-height: 1.45;
+  color: #e5e7eb;
+  text-align: center;
+  padding: 0;
+}

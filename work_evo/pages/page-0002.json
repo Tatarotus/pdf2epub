@@ -1,0 +1,30 @@
+{
+  "page_number": 2,
+  "chapter_id": "ch01",
+  "is_chapter_start": true,
+  "content_type": "chapter_start",
+  "xhtml": "<div class=\"epigraph-block\"><figure><img src=\"img-p002-01.jpg\" alt=\"Illustration of a skull and tools\" /><figcaption>In the distant future I see open fields for more important researches. Psychology will be based on a new foundation, that of the necessary acquirement of each mental power and capacity by gradation.<br/><br/>—Charles Darwin, 1859</figcaption></figure></div><h1 class=\"chapter-title\">THE SCIENTIFIC MOVEMENTS LEADING TO EVOLUTIONARY PSYCHOLOGY</h1><p class=\"has-dropcap\"><span class=\"dropcap\">A</span>s the archaeologist dusted off the dirt and debris from the skeleton, she noticed something strange: The left side of the skull had a large dent, apparently from a ferocious blow, and the rib cage—also on the left side—had the head of a spear lodged in it. Back in the laboratory, scientists determined that the skeleton was that of a Neanderthal man who had died roughly 50,000 years ago, the earliest known homicide victim. His killer, judging from the damage to the skull and rib cage, bore the lethal weapon in his right hand!</p><p>The fossil record of injuries to bones reveals two strikingly common patterns (Jurmain et al., 2009; Trinkaus &amp; Zimmerman, 1982; Walker, 1995). First, the skeletons of men contain far more fractures and dents than do the skeletons of women. Second, the injuries are located mainly on the left frontal sides of the skulls and skeletons, suggesting right-handed attackers. The bone record alone cannot tell us with certainty that combat among men was a central feature of human ancestral life. Nor can it tell us with certainty that men evolved to be the more physically aggressive sex. But skeletal remains provide clues that yield a fascinating piece of the <em>puzzle</em> of where we came from, the forces that shaped who we are, and the nature of our minds today.</p><p>The huge human brain, approximately 1,350 cubic centimeters, is the most complex organic structure in the known world. Understanding the human mind/brain mechanisms in evolutionary perspective is the goal of the new scientific discipline called <em>evolutionary psychology</em>. Evolutionary psychology focuses on four key questions: (1) Why is the mind designed the way it is—that is, what causal processes created, fashioned, or shaped the human mind into its current form? (2) <em>How</em> is the human mind designed—what</p>",
+  "images": [
+    {
+      "id": "img-p002-01",
+      "alt": "Black and white illustration of a skull and stone tools",
+      "caption": null,
+      "is_cover": false,
+      "bbox_hint": [
+        0.05,
+        0.15,
+        0.35,
+        0.55
+      ]
+    }
+  ],
+  "chrome_detected": [
+    {
+      "kind": "page_number",
+      "text": "2"
+    }
+  ],
+  "footnotes": [],
+  "confidence": 0.98,
+  "notes": "Chapter start page with epigraph block, large title, and drop cap. Text cuts off mid-sentence at bottom."
+}
