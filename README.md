@@ -107,6 +107,7 @@ python3 pdf2epub.py assemble --book work/book.json --pages work/pages --epub out
 The engine sends page images as base64 `data:` URLs to
 `/chat/completions`, requests `response_format: {"type": "json_object"}`, and
 writes intermediate artifacts to `work/book.json` and `work/pages/page-NNNN.json`.
+It uses Pillow to downsample rendered PNGs before sending them to the API.
 
 ## Model notes — qwen/qwen3.5-397b-a17b
 

@@ -20,11 +20,14 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 
 DEFAULT_BASE_URL = "https://dav.smre.run.place/v1"
@@ -60,9 +63,19 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def image_data_url(path: Path) -> str:
-    media_type = mimetypes.guess_type(path.name)[0] or "image/png"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+def page_sort_key(path: Path) -> tuple[int, str]:
+    digits = "".join(ch for ch in path.stem if ch.isdigit())
+    return (int(digits) if digits else 0, path.name)
+
+
+def image_data_url(path: Path, max_edge: int = 650, quality: int = 65) -> str:
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+        image.thumbnail((max_edge, max_edge))
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=quality, optimize=True)
+    media_type = "image/jpeg"
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:{media_type};base64,{encoded}"
 
 
@@ -78,14 +91,14 @@ def render_pages(pdf: Path, pages_dir: Path, dpi: int) -> list[Path]:
         ["pdftoppm", "-r", str(dpi), "-png", str(pdf), str(prefix)],
         check=True,
     )
-    pages = sorted(pages_dir.glob("page-*.png"))
+    pages = sorted(pages_dir.glob("page-*.png"), key=page_sort_key)
     if not pages:
         raise PipelineError(f"No rendered pages found in {pages_dir}")
     return pages
 
 
 def discover_pages(pages_dir: Path) -> list[Path]:
-    pages = sorted(pages_dir.glob("page-*.png"))
+    pages = sorted(pages_dir.glob("page-*.png"), key=page_sort_key)
     if not pages:
         raise PipelineError(f"No page PNG files found in {pages_dir}")
     return pages
@@ -93,11 +106,18 @@ def discover_pages(pages_dir: Path) -> list[Path]:
 
 def sample_architect_pages(pages: list[Path], interior_samples: int = 10) -> list[Path]:
     total = len(pages)
-    indexes = set(range(min(6, total)))
-    indexes.update(range(max(0, total - 4), total))
-    if total > 10 and interior_samples > 0:
-        for i in range(1, interior_samples + 1):
-            indexes.add(round((total - 1) * i / (interior_samples + 1)))
+    if total <= 30:
+        indexes = set(range(min(6, total)))
+        indexes.update(range(max(0, total - 2), total))
+        return [pages[i] for i in sorted(indexes)]
+    front_count = 4 if total <= 30 else 6
+    back_count = 2 if total <= 30 else 4
+    indexes = set(range(min(front_count, total)))
+    indexes.update(range(max(0, total - back_count), total))
+    interior_count = min(interior_samples, 2 if total <= 30 else interior_samples)
+    if total > 10 and interior_count > 0:
+        for i in range(1, interior_count + 1):
+            indexes.add(round((total - 1) * i / (interior_count + 1)))
     return [pages[i] for i in sorted(indexes)]
 
 
@@ -137,14 +157,22 @@ def chat_completion(
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=config.request_timeout) as response:
-            response_body = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise PipelineError(f"API request failed with HTTP {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise PipelineError(f"API request failed: {exc}") from exc
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=config.request_timeout) as response:
+                response_body = response.read().decode("utf-8")
+            break
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            if exc.code in {502, 503, 504} and attempt < 2:
+                time.sleep(2**attempt)
+                continue
+            raise PipelineError(f"API request failed with HTTP {exc.code}: {error_body}") from exc
+        except urllib.error.URLError as exc:
+            if attempt < 2:
+                time.sleep(2**attempt)
+                continue
+            raise PipelineError(f"API request failed: {exc}") from exc
 
     data = json.loads(response_body)
     content = data["choices"][0]["message"]["content"]
@@ -168,7 +196,7 @@ def architect_pass(config: Config, repo: Path, pages: list[Path], out_dir: Path)
     content: list[dict[str, Any]] = [{"type": "text", "text": architect_prompt}]
     for page in sample_architect_pages(pages):
         content.append({"type": "text", "text": f"Image label: {page.name}"})
-        content.append({"type": "image_url", "image_url": {"url": image_data_url(page)}})
+        content.append({"type": "image_url", "image_url": {"url": image_data_url(page, max_edge=450, quality=58)}})
     book = chat_completion(
         config,
         [
@@ -257,6 +285,7 @@ def extract_one_page(
             },
         ],
     )
+    result["page_number"] = page_number
     write_json(out_dir / f"page-{page_number:04d}.json", result)
     return result
 
@@ -280,6 +309,12 @@ def extract_pages(
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = {}
         for index, page in enumerate(selected_pages, start=1):
+            existing = page_out / f"page-{index:04d}.json"
+            if existing.exists():
+                result = read_json(existing)
+                results[index] = result
+                previous_tail_by_page[index] = str(result.get("xhtml", ""))[-600:]
+                continue
             previous_tail = previous_tail_by_page.get(index - 1, "")
             future = executor.submit(
                 extract_one_page,
@@ -354,7 +389,7 @@ def build_nav(book: dict[str, Any], chapter_files: dict[str, str]) -> str:
 '''
 
 
-def build_opf(book: dict[str, Any], chapter_files: dict[str, str]) -> str:
+def build_opf(book: dict[str, Any], chapter_files: dict[str, str], image_files: dict[str, str]) -> str:
     identifier = book.get("isbn") or f"urn:uuid:{uuid.uuid4()}"
     modified = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     manifest_items = ['    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>']
@@ -363,6 +398,9 @@ def build_opf(book: dict[str, Any], chapter_files: dict[str, str]) -> str:
         item_id = f"item-{idx}"
         manifest_items.append(f'    <item id="{item_id}" href="{href}" media-type="application/xhtml+xml"/>')
         spine_items.append(f'    <itemref idref="{item_id}"/>')
+    for image_id, href in image_files.items():
+        media_type = mimetypes.guess_type(href)[0] or "image/png"
+        manifest_items.append(f'    <item id="{image_id}" href="{href}" media-type="{media_type}"/>')
     manifest = "\n".join(manifest_items)
     spine = "\n".join(spine_items)
     creators = "\n".join(f"    <dc:creator>{escape_xml(author)}</dc:creator>" for author in book.get("authors", []))
@@ -386,24 +424,61 @@ def build_opf(book: dict[str, Any], chapter_files: dict[str, str]) -> str:
 '''
 
 
-def assemble_epub(book: dict[str, Any], pages: list[dict[str, Any]], out_dir: Path, epub_path: Path) -> None:
+def assemble_epub(
+    book: dict[str, Any],
+    pages: list[dict[str, Any]],
+    out_dir: Path,
+    epub_path: Path,
+    source_pages_dir: Path | None = None,
+) -> None:
+    epub_path = epub_path.resolve()
     epub_root = out_dir / "epub"
     oebps = epub_root / "OEBPS"
+    images_dir = oebps / "images"
     meta_inf = epub_root / "META-INF"
     if epub_root.exists():
         shutil.rmtree(epub_root)
     oebps.mkdir(parents=True)
+    images_dir.mkdir(parents=True)
     meta_inf.mkdir(parents=True)
 
     groups: dict[str, list[str]] = {}
+    image_files: dict[str, str] = {}
+    cover_page: int | None = None
     for page in pages:
-        groups.setdefault(page.get("chapter_id", "unassigned"), []).append(page.get("xhtml", ""))
+        page_number = int(page.get("page_number", 1))
+        spine_entry = spine_entry_for_page(book, page_number)
+        groups.setdefault(spine_entry.get("id", page.get("chapter_id", "unassigned")), []).append(page.get("xhtml", ""))
+        for image in page.get("images", []):
+            if image.get("is_cover"):
+                cover_page = page_number
 
     chapter_files: dict[str, str] = {}
     language = book.get("language", "en")
     direction = book.get("direction", "ltr")
+    if cover_page and source_pages_dir:
+        source = sorted(source_pages_dir.glob(f"page-{cover_page:02d}.png"), key=page_sort_key)
+        if not source:
+            source = sorted(source_pages_dir.glob(f"page-{cover_page:03d}.png"), key=page_sort_key)
+        if source:
+            cover_name = "images/cover.png"
+            shutil.copyfile(source[0], oebps / cover_name)
+            image_files["cover-image"] = cover_name
+            chapter_files["front-cover"] = "cover.xhtml"
+            (oebps / "cover.xhtml").write_text(
+                wrap_xhtml(
+                    book.get("title", "Cover"),
+                    '<figure class="cover"><img src="images/cover.png" alt="Cover"/></figure>',
+                    language,
+                    direction,
+                ),
+                encoding="utf-8",
+            )
+
     for entry in book.get("spine", []):
         chapter_id = entry["id"]
+        if chapter_id in chapter_files:
+            continue
         body = "\n".join(groups.get(chapter_id, []))
         if not body:
             continue
@@ -426,11 +501,54 @@ def assemble_epub(book: dict[str, Any], pages: list[dict[str, Any]], out_dir: Pa
         encoding="utf-8",
     )
     (oebps / "style.css").write_text(
-        "body { line-height: 1.35; }\n.smallcaps { font-variant: small-caps; }\n",
+        """@page { size: 454pt 652pt; margin: 54pt 56pt 42pt; }
+body {
+  font-family: "Minion Pro", Georgia, serif;
+  line-height: 1.38;
+  color: #111;
+}
+h1.chapter-title {
+  font-family: "Prensa", Georgia, serif;
+  font-size: 2.4em;
+  line-height: 1.05;
+  margin: 2.2em 0 0.8em;
+}
+h2 {
+  font-family: "National HBR", "News Gothic", Arial, sans-serif;
+  font-size: 1.15em;
+  margin: 1.4em 0 0.6em;
+}
+p { margin: 0 0 0.85em; text-align: justify; }
+.author { font-style: italic; margin-bottom: 4em; }
+.dropcap {
+  float: left;
+  font-size: 7.5em;
+  line-height: 0.72;
+  color: #e5e5e5;
+  margin: 0.02em 0.05em 0 0;
+}
+.smallcaps { font-variant: small-caps; }
+.summary-box, .sidebar {
+  border-top: 1px solid #999;
+  border-bottom: 1px solid #999;
+  margin: 1.2em 0;
+  padding: 0.8em 0;
+}
+blockquote { margin: 1.2em 1.5em; font-style: italic; }
+.centered, .publisher-url { text-align: center; }
+.cover { margin: 0; }
+.cover img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100vh;
+  margin: 0 auto;
+}
+""",
         encoding="utf-8",
     )
     (oebps / "nav.xhtml").write_text(build_nav(book, chapter_files), encoding="utf-8")
-    (oebps / "metadata.opf").write_text(build_opf(book, chapter_files), encoding="utf-8")
+    (oebps / "metadata.opf").write_text(build_opf(book, chapter_files, image_files), encoding="utf-8")
 
     if shutil.which("zip") is None:
         raise PipelineError("zip is required to package the EPUB.")
@@ -520,15 +638,19 @@ def main() -> int:
         elif args.command == "assemble":
             book = read_json(args.book)
             page_files = sorted(args.pages.glob("page-*.json"))
-            pages = [read_json(path) for path in page_files]
-            assemble_epub(book, pages, args.out, args.epub)
+            pages = []
+            for path in page_files:
+                page = read_json(path)
+                page["page_number"] = page_sort_key(path)[0]
+                pages.append(page)
+            assemble_epub(book, pages, args.out, args.epub, args.pages)
             print(f"Wrote EPUB to {args.epub}")
         elif args.command == "run":
             pages_dir = args.work / "rendered"
             pages = render_pages(args.pdf, pages_dir, args.dpi)
             book = architect_pass(config, repo, pages, args.work)
             results = extract_pages(config, repo, pages, book, args.work, args.concurrency, args.limit)
-            assemble_epub(book, results, args.work, args.epub)
+            assemble_epub(book, results, args.work, args.epub, pages_dir)
             print(f"Wrote EPUB to {args.epub}")
     except (PipelineError, subprocess.CalledProcessError, KeyError, json.JSONDecodeError) as exc:
         parser.exit(1, f"error: {exc}\n")
