@@ -1,0 +1,45 @@
+{
+  "title": "The Crossing",
+  "subtitle": null,
+  "authors": ["Cormac McCarthy"],
+  "language": "en",
+  "direction": "ltr",
+  "publisher": "Alfred A. Knopf",
+  "published_year": 1994,
+  "isbn": null,
+  "description": null,
+  "spine": [
+    { "id": "front-cover", "title": "Cover", "first_page": 1, "first_page_printed": null, "kind": "cover", "running_header": null },
+    { "id": "front-half-title", "title": "Half Title", "first_page": 2, "first_page_printed": null, "kind": "half_title", "running_header": null },
+    { "id": "front-title", "title": "Title Page", "first_page": 3, "first_page_printed": null, "kind": "title_page", "running_header": null },
+    { "id": "front-copyright", "title": "Copyright", "first_page": 4, "first_page_printed": null, "kind": "copyright", "running_header": null },
+    { "id": "front-dedication", "title": "Dedication", "first_page": 5, "first_page_printed": null, "kind": "dedication", "running_header": null },
+    { "id": "front-toc", "title": "Contents", "first_page": 6, "first_page_printed": null, "kind": "toc", "running_header": null },
+    { "id": "ch01", "title": "The Wild Horses", "first_page": 13, "first_page_printed": 1, "kind": "chapter", "running_header": "THE WILD HORSES" },
+    { "id": "ch02", "title": "A Beach Beyond", "first_page": 41, "first_page_printed": 29, "kind": "chapter", "running_header": "A BEACH BEYOND" },
+    { "id": "ch03", "title": "The Horse Trader", "first_page": 70, "first_page_printed": 58, "kind": "chapter", "running_header": "THE HORSE TRADER" },
+    { "id": "ch04", "title": "The Judge", "first_page": 102, "first_page_printed": 90, "kind": "chapter", "running_header": "THE JUDGE" },
+    { "id": "ch05", "title": "The Crossing", "first_page": 135, "first_page_printed": 123, "kind": "chapter", "running_header": "THE CROSSING" },
+    { "id": "ch06", "title": "Diamonds in the Rough", "first_page": 174, "first_page_printed": 162, "kind": "chapter", "running_header": "DIAMONDS IN THE ROUGH" },
+    { "id": "ch07", "title": "The Crossing", "first_page": 220, "first_page_printed": 208, "kind": "chapter", "running_header": "THE CROSSING" },
+    { "id": "ch08", "title": "The Last Stage", "first_page": 256, "first_page_printed": 244, "kind": "chapter", "running_header": "THE LAST STAGE" },
+    { "id": "back-colophon", "title": "Colophon", "first_page": 384, "first_page_printed": null, "kind": "colophon", "running_header": null }
+  ],
+  "conventions": {
+    "has_running_headers": true,
+    "has_page_numbers": true,
+    "page_number_position": "bottom_center",
+    "has_drop_caps": true,
+    "has_two_column": false,
+    "has_footnotes": true,
+    "footnote_style": "numbered_per_page",
+    "first_page_number_visible": 1
+  },
+  "extraction_warnings": [
+    "Page 220 is a fold-out map that spans PDF pages 220\u2013222; treat the whole as one plate with content_type=plate and a single bbox covering the full spread.",
+    "Page 305 contains a full-page illustration \u2014 flag as content_type=plate.",
+    "Spanish phrases appear throughout chapter 7 untranslated; preserve them exactly, do not italicize unless the original does."
+  ],
+  "confidence": 0.88,
+  "notes": "Spine confirmed from running headers on body pages. Title page confirms author and publisher. Copyright page not yet sampled \u2014 ISBN/Publisher inferred from cover and half title."
+}

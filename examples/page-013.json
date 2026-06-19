@@ -1,0 +1,15 @@
+{
+  "page_number": 13,
+  "chapter_id": "ch01",
+  "is_chapter_start": true,
+  "content_type": "chapter_start",
+  "xhtml": "<section class=\"chapter\" id=\"ch01\" epub:type=\"chapter\"><p class=\"chapter-label\">Chapter 1</p><h1 class=\"chapter-title\">The Wild Horses</h1><blockquote class=\"epigraph\"><p>All his life he had ridden west toward the sunset, and somewhere, he knew, was the country where the horses were.</p></blockquote><p class=\"has-dropcap\"><span class=\"dropcap\">B</span>illy was sixteen that spring the rains came late and the horses had grown thin on the dry grass. He and his grandfather rode out at first light to look at the herd that had come down out of the hills in the night: forty head, perhaps fifty, moving slow through the brush along the fence line, the colts staying close to the mares, the stallion bringing up the rear with his head low and his ears flicking at the flies.</p></section>",
+  "images": [],
+  "chrome_detected": [
+    { "kind": "running_header", "text": "THE WILD HORSES" },
+    { "kind": "page_number", "text": "1" }
+  ],
+  "footnotes": [],
+  "confidence": 0.96,
+  "notes": "Chapter start. Centered 'Chapter 1' label, large centered title, italic epigraph, drop cap on first paragraph. Folio '1' at bottom is the printed page number for this book's first body page (PDF page 13)."
+}

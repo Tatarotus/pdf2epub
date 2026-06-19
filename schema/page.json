@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/pdf2epub/page.json",
+  "title": "Pagewright — Single Page Extraction",
+  "type": "object",
+  "required": ["page_number", "chapter_id", "content_type", "xhtml", "images", "chrome_detected", "footnotes", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "page_number": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-indexed PDF page number."
+    },
+    "chapter_id": {
+      "type": "string",
+      "description": "Must match a chapter id from book.json spine. Use 'unassigned' if unknown."
+    },
+    "is_chapter_start": {
+      "type": "boolean",
+      "default": false
+    },
+    "content_type": {
+      "type": "string",
+      "enum": [
+        "cover",
+        "half_title",
+        "title_page",
+        "copyright",
+        "dedication",
+        "epigraph",
+        "toc",
+        "preface",
+        "foreword",
+        "introduction",
+        "acknowledgments",
+        "chapter_body",
+        "chapter_start",
+        "appendix",
+        "glossary",
+        "bibliography",
+        "index",
+        "colophon",
+        "about_author",
+        "plate",
+        "foldout",
+        "blank",
+        "other"
+      ]
+    },
+    "xhtml": {
+      "type": "string",
+      "description": "XHTML 5 fragment. No <html>/<body> wrapper. May be empty for cover/blank/plate.",
+      "default": ""
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^img-[a-zA-Z0-9_\\-]+$" },
+          "alt": { "type": "string" },
+          "caption": { "type": "string" },
+          "is_cover": { "type": "boolean", "default": false },
+          "bbox_hint": {
+            "type": "array",
+            "items": { "type": "number", "minimum": 0, "maximum": 1 },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "[x1, y1, x2, y2] normalized to [0,1]."
+          }
+        }
+      }
+    },
+    "chrome_detected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "page_number",
+              "running_header",
+              "running_footer",
+              "watermark",
+              "library_stamp",
+              "copyright_overlay",
+              "bleed"
+            ]
+          },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "footnotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^fn-[a-zA-Z0-9_\\-]+$" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "notes": { "type": "string" }
+  }
+}

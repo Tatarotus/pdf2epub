@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/pdf2epub/book.json",
+  "title": "Pagewright — Book Architect Output",
+  "type": "object",
+  "required": ["title", "authors", "language", "direction", "spine", "conventions", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string" },
+    "subtitle": { "type": ["string", "null"] },
+    "authors": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "language": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
+    "direction": { "type": "string", "enum": ["ltr", "rtl"] },
+    "publisher": { "type": ["string", "null"] },
+    "published_year": { "type": ["integer", "null"] },
+    "isbn": { "type": ["string", "null"] },
+    "description": { "type": ["string", "null"] },
+
+    "spine": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "first_page", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9\\-_]{0,63}$"
+          },
+          "title": { "type": "string" },
+          "first_page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-indexed PDF page number where this unit starts."
+          },
+          "first_page_printed": {
+            "type": ["integer", "null"],
+            "description": "Printed folio if visible on the page, otherwise null."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cover",
+              "half_title",
+              "title_page",
+              "copyright",
+              "dedication",
+              "epigraph",
+              "toc",
+              "preface",
+              "foreword",
+              "introduction",
+              "acknowledgments",
+              "chapter",
+              "part",
+              "interlude",
+              "appendix",
+              "glossary",
+              "bibliography",
+              "index",
+              "colophon",
+              "about_author",
+              "plate",
+              "foldout",
+              "blank",
+              "other"
+            ]
+          },
+          "running_header": {
+            "type": ["string", "null"],
+            "description": "Verbatim header text expected on body pages of this unit, or null."
+          },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+
+    "conventions": {
+      "type": "object",
+      "required": ["has_running_headers", "has_page_numbers", "first_page_number_visible"],
+      "additionalProperties": false,
+      "properties": {
+        "has_running_headers": { "type": "boolean" },
+        "has_page_numbers": { "type": "boolean" },
+        "page_number_position": {
+          "type": "string",
+          "enum": ["top_center", "top_outer", "bottom_center", "bottom_outer", "margin"]
+        },
+        "has_drop_caps": { "type": "boolean" },
+        "has_two_column": { "type": "boolean" },
+        "has_footnotes": { "type": "boolean" },
+        "footnote_style": {
+          "type": "string",
+          "enum": ["numbered_per_page", "numbered_per_chapter", "symbols", "endnotes"]
+        },
+        "first_page_number_visible": {
+          "type": ["integer", "null"],
+          "description": "Printed folio on the first body page (chapter 1 first page), null if no folios."
+        }
+      }
+    },
+
+    "extraction_warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "notes": { "type": ["string", "null"] }
+  }
+}

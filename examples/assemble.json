@@ -1,0 +1,51 @@
+{
+  "nav_xhtml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE html>\n<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:epub=\"http://www.idpf.org/2007/ops\">\n<head><title>Contents</title></head>\n<body>\n<nav epub:type=\"toc\" id=\"toc\">\n  <h1>Contents</h1>\n  <ol>\n    <li><a href=\"front-half-title.xhtml\">Half Title</a></li>\n    <li><a href=\"front-title.xhtml\">Title Page</a></li>\n    <li><a href=\"front-copyright.xhtml\">Copyright</a></li>\n    <li><a href=\"front-dedication.xhtml\">Dedication</a></li>\n    <li><a href=\"ch01.xhtml\">Chapter 1. The Wild Horses</a></li>\n    <li><a href=\"ch02.xhtml\">Chapter 2. A Beach Beyond</a></li>\n    <li><a href=\"ch03.xhtml\">Chapter 3. The Horse Trader</a></li>\n    <li><a href=\"ch04.xhtml\">Chapter 4. The Judge</a></li>\n    <li><a href=\"ch05.xhtml\">Chapter 5. The Crossing</a></li>\n    <li><a href=\"ch06.xhtml\">Chapter 6. Diamonds in the Rough</a></li>\n    <li><a href=\"ch07.xhtml\">Chapter 7. The Crossing</a></li>\n    <li><a href=\"ch08.xhtml\">Chapter 8. The Last Stage</a></li>\n    <li><a href=\"back-colophon.xhtml\">Colophon</a></li>\n  </ol>\n</nav>\n<nav epub:type=\"landmarks\" id=\"landmarks\" hidden=\"hidden\">\n  <h2>Guide</h2>\n  <ol>\n    <li><a epub:type=\"cover\" href=\"front-cover.xhtml\">Cover</a></li>\n    <li><a epub:type=\"toc\" href=\"nav.xhtml\">Table of Contents</a></li>\n    <li><a epub:type=\"bodymatter\" href=\"ch01.xhtml\">Begin Reading</a></li>\n  </ol>\n</nav>\n</body>\n</html>",
+  "metadata_opf": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<package xmlns=\"http://www.idpf.org/2007/opf\" version=\"3.0\" unique-identifier=\"bookid\" xml:lang=\"en\">\n  <metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\n    <dc:identifier id=\"bookid\">urn:uuid:9c0e3a8e-2f1d-4f3a-9b7e-1f9a4b6c2d11</dc:identifier>\n    <dc:title>The Crossing</dc:title>\n    <dc:creator id=\"author\">Cormac McCarthy</dc:creator>\n    <meta refines=\"#author\" property=\"file-as\">McCarthy, Cormac</meta>\n    <dc:language>en</dc:language>\n    <dc:publisher>Alfred A. Knopf</dc:publisher>\n    <dc:date>1994</dc:date>\n    <meta property=\"dcterms:modified\">2026-06-19T09:28:07Z</meta>\n    <meta name=\"cover\" content=\"img-cover\"/>\n  </metadata>\n  <manifest>\n    <item id=\"nav\" href=\"nav.xhtml\" media-type=\"application/xhtml+xml\" properties=\"nav\"/>\n    <item id=\"img-cover\" href=\"images/cover.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>\n    <item id=\"front-cover\" href=\"front-cover.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"front-half-title\" href=\"front-half-title.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"front-title\" href=\"front-title.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"front-copyright\" href=\"front-copyright.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"front-dedication\" href=\"front-dedication.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch01\" href=\"ch01.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch02\" href=\"ch02.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch03\" href=\"ch03.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch04\" href=\"ch04.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch05\" href=\"ch05.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch06\" href=\"ch06.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch07\" href=\"ch07.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"ch08\" href=\"ch08.xhtml\" media-type=\"application/xhtml+xml\"/>\n    <item id=\"back-colophon\" href=\"back-colophon.xhtml\" media-type=\"application/xhtml+xml\"/>\n  </manifest>\n  <spine>\n    <itemref idref=\"front-cover\"/>\n    <itemref idref=\"front-half-title\"/>\n    <itemref idref=\"front-title\"/>\n    <itemref idref=\"front-copyright\"/>\n    <itemref idref=\"front-dedication\"/>\n    <itemref idref=\"nav\"/>\n    <itemref idref=\"ch01\"/>\n    <itemref idref=\"ch02\"/>\n    <itemref idref=\"ch03\"/>\n    <itemref idref=\"ch04\"/>\n    <itemref idref=\"ch05\"/>\n    <itemref idref=\"ch06\"/>\n    <itemref idref=\"ch07\"/>\n    <itemref idref=\"ch08\"/>\n    <itemref idref=\"back-colophon\"/>\n  </spine>\n  <guide>\n    <reference type=\"cover\" title=\"Cover\" href=\"front-cover.xhtml\"/>\n    <reference type=\"toc\" title=\"Table of Contents\" href=\"nav.xhtml\"/>\n    <reference type=\"start\" title=\"Beginning\" href=\"ch01.xhtml\"/>\n  </guide>\n</package>",
+  "cover": {
+    "image_path": "images/cover.jpg",
+    "source_page": 1,
+    "confirmed": true
+  },
+  "chapter_audit": [
+    {
+      "chapter_id": "ch07",
+      "page_range": [220, 255],
+      "issues": [
+        {
+          "severity": "warn",
+          "kind": "orphaned_footnote",
+          "detail": "Page 234 contains <a href=\"#fn-234-2\"> but no matching footnote in footnotes[]. Reference removed; footnote text was 'see p. 88.' which is preserved in extraction notes."
+        },
+        {
+          "severity": "info",
+          "kind": "mid_paragraph_break",
+          "detail": "Page 240 first <p> opens with a lowercase 'and' — confirmed via page-241 image as a continuation. No fix needed."
+        }
+      ],
+      "confidence": 0.94
+    },
+    {
+      "chapter_id": "ch05",
+      "page_range": [135, 173],
+      "issues": [],
+      "confidence": 0.97
+    }
+  ],
+  "human_review": [
+    {
+      "page": 220,
+      "reason": "Fold-out map spanning three PDF pages. The bbox_hint returned by the extractor covers only the visible single-page crop. Confirm whether the spread should be one image or three.",
+      "suggested_action": "Accept as a single image with the largest bbox across the three PDF pages, or split into three plates."
+    }
+  ],
+  "stats": {
+    "total_pages": 387,
+    "total_chapters": 8,
+    "total_images": 47,
+    "total_footnotes": 213,
+    "estimated_word_count": 118420,
+    "warnings": 2,
+    "errors": 0
+  },
+  "ready_to_package": true
+}

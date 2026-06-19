@@ -1,0 +1,5 @@
+work/
+out/
+*.epub
+__pycache__/
+*.pyc

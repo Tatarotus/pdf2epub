@@ -1,0 +1,17 @@
+{
+  "page_number": 87,
+  "chapter_id": "ch07",
+  "is_chapter_start": false,
+  "content_type": "chapter_body",
+  "xhtml": "<p>The willows had finally leafed out by the second week of April and the boys drove the horses down to the lower pasture to graze on the new grass. They were ahorseback by six each morning, before the heat, and worked the remuda from one end of the fence line to the other, replacing rotten posts and restringing wire where the cattle had pushed through.</p><p class=\"has-dropcap\"><span class=\"dropcap\">T</span>he river was high that spring<sup><a href=\"#fn-87-1\" id=\"fnref-87-1\">1</a></sup> and the willows along the bank were still bare. He <em>thought of his father</em> as he watched the current take a branch downriver and around the bend, the white wood turning slow in the eddies before it was gone.</p>",
+  "images": [],
+  "chrome_detected": [
+    { "kind": "running_header", "text": "CHAPTER 7 \u2014 THE CROSSING" },
+    { "kind": "page_number", "text": "112" }
+  ],
+  "footnotes": [
+    { "id": "fn-87-1", "text": "Smith, op. cit., p. 14." }
+  ],
+  "confidence": 0.95,
+  "notes": "Single column, justified. One drop cap on second paragraph. One footnote. One italicized phrase. Two short paragraphs visible, both fully on this page."
+}
