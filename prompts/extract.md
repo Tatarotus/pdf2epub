@@ -49,6 +49,7 @@ If PAGE_KIND_HINT is "chapter_start", make sure:
 - You render the chapter title as <h1 class="chapter-title">{TITLE}</h1>
 - You render "Chapter N" or "CHAPTER N" above it as <p class="chapter-label">Chapter N</p>
   if it appears on the page
+- You render any subtitle or tagline appearing directly under the title as <p class="chapter-subtitle">…</p>
 - You render any epigraph as <blockquote class="epigraph">…</blockquote>
 - The first body paragraph may have a drop cap — wrap it accordingly
 - Set is_chapter_start: true

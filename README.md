@@ -89,18 +89,46 @@ OpenAI-compatible vision endpoint:
 - API base URL: `https://dav.smre.run.place/v1`
 - Vision model: `qwen/qwen3.5-397b-a17b`
 
-Set an API key with either `DAV_API_KEY` or `OPENAI_API_KEY`, then run:
+### Quickest Start
+
+Set an API key with either `DAV_API_KEY` or `OPENAI_API_KEY`, then run the script directly with your PDF file:
 
 ```bash
-python3 pdf2epub.py run "input.pdf" --work work --epub out/book.epub
+python3 pdf2epub.py "input.pdf"
 ```
 
-Useful subcommands:
+The engine will automatically:
+1. Normalize the file name into a clean, lower-case slug (e.g., `gestao-de-si-mesmo-peter-f-drucker`).
+2. Run the `run` command automatically, isolating the workspace to `work_<slug>/`.
+3. Extract and heal font metrics.
+4. Render the PDF pages to PNG (skipping rendering on subsequent runs if pages are already rendered).
+5. Analyze the page layouts and chapter structure using the Vision model (loading from the existing `book.json` if it already exists, allowing you to edit the spine manually without losing your modifications or re-incurring API costs).
+6. Extract each page's content in parallel with a default concurrency of 12, showing a real-time progress bar (loading cached pages instantly and only extracting new/missing pages).
+7. Assemble and package the finished reflowable EPUB directly to `out/<slug>.epub`.
+
+### Global CLI Options
+
+You can place configuration options anywhere on the command line:
+
+- `--concurrency <N>`: Concurrency for extraction (default: 12)
+- `--dpi <N>`: DPI to render PDF pages (default: 250)
+- `--work <path>`: Override the default workspace directory
+- `--epub <path>`: Override the default output EPUB path
+- `--limit <N>`: Limit number of pages to process (useful for quick testing)
+
+Example:
+```bash
+python3 pdf2epub.py "input.pdf" --concurrency 16 --limit 5
+```
+
+### Useful Subcommands (Advanced)
+
+If you want to run steps individually:
 
 ```bash
-python3 pdf2epub.py render "input.pdf" --out work/pages --dpi 250
+python3 pdf2epub.py render "input.pdf" --out work/pages
 python3 pdf2epub.py architect --pages work/pages --out work
-python3 pdf2epub.py extract --pages work/pages --book work/book.json --out work --concurrency 8
+python3 pdf2epub.py extract --pages work/pages --book work/book.json --out work
 python3 pdf2epub.py assemble --book work/book.json --pages work/pages --epub out/book.epub
 ```
 

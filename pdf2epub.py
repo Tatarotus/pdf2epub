@@ -82,9 +82,33 @@ def image_data_url(path: Path, max_edge: int = 650, quality: int = 65) -> str:
 def render_pages(pdf: Path, pages_dir: Path, dpi: int) -> list[Path]:
     if not pdf.exists():
         raise PipelineError(f"PDF not found: {pdf}")
+
+    # Check if pages are already rendered
+    total_pages = None
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(pdf)
+        total_pages = len(reader.pages)
+    except Exception:
+        pass
+
+    if total_pages is not None:
+        existing_pages = sorted(pages_dir.glob("page-*.png"), key=page_sort_key)
+        if len(existing_pages) == total_pages:
+            print(f"  Found {total_pages} existing rendered pages in {pages_dir}. Skipping rendering.")
+            return existing_pages
+
     if shutil.which("pdftoppm") is None:
         raise PipelineError("pdftoppm is required to render PDF pages.")
 
+    print(f"  Rendering PDF pages to PNG (DPI: {dpi})...")
+    # Clean up existing pages to avoid mismatched leftovers
+    if pages_dir.exists():
+        for f in pages_dir.glob("page-*.png"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
     pages_dir.mkdir(parents=True, exist_ok=True)
     prefix = pages_dir / "page"
     subprocess.run(
@@ -137,6 +161,7 @@ def chat_completion(
     messages: list[dict[str, Any]],
     max_tokens: int | None = None,
     retry_json: bool = True,
+    use_response_format: bool = True,
 ) -> dict[str, Any]:
     endpoint = config.base_url.rstrip("/") + "/chat/completions"
     payload = {
@@ -145,9 +170,17 @@ def chat_completion(
         "temperature": config.temperature,
         "top_p": config.top_p,
         "max_tokens": max_tokens or config.max_tokens,
-        "response_format": {"type": "json_object"},
     }
+    if use_response_format:
+        payload["response_format"] = {"type": "json_object"}
+
     body = json.dumps(payload).encode("utf-8")
+    # Debug: write payload to request_payload.json
+    try:
+        with open("request_payload.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+    except Exception:
+        pass
     request = urllib.request.Request(
         endpoint,
         data=body,
@@ -164,6 +197,9 @@ def chat_completion(
             break
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
+            if use_response_format and exc.code in {400, 500}:
+                print("  Warning: API request failed with HTTP 500/400. Retrying without response_format...")
+                return chat_completion(config, messages, max_tokens, retry_json, use_response_format=False)
             if exc.code in {502, 503, 504} and attempt < 2:
                 time.sleep(2**attempt)
                 continue
@@ -187,7 +223,7 @@ def chat_completion(
                 "content": "Previous output was not valid JSON. Return only the JSON object.",
             }
         ]
-        return chat_completion(config, retry_messages, max_tokens=max_tokens, retry_json=False)
+        return chat_completion(config, retry_messages, max_tokens=max_tokens, retry_json=False, use_response_format=use_response_format)
 
 
 def architect_pass(config: Config, repo: Path, pages: list[Path], out_dir: Path) -> dict[str, Any]:
@@ -210,7 +246,8 @@ def architect_pass(config: Config, repo: Path, pages: list[Path], out_dir: Path)
 
 
 def spine_entry_for_page(book: dict[str, Any], page_number: int) -> dict[str, Any]:
-    spine = sorted(book.get("spine", []), key=lambda item: item.get("first_page", 1))
+    spine = [entry for entry in book.get("spine", []) if entry.get("id") != "generated-toc"]
+    spine = sorted(spine, key=lambda item: item.get("first_page", 1))
     current = spine[0] if spine else {"id": "unassigned", "title": "Unknown", "kind": "other"}
     for entry in spine:
         if entry.get("first_page", 1) <= page_number:
@@ -304,41 +341,61 @@ def extract_pages(
     previous_tail_by_page: dict[int, str] = {}
     results: dict[int, dict[str, Any]] = {}
 
-    # Prompts benefit from previous-page context, so submit in bounded batches
-    # and use the last completed prior page when available.
-    with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = {}
-        for index, page in enumerate(selected_pages, start=1):
-            existing = page_out / f"page-{index:04d}.json"
-            if existing.exists():
-                result = read_json(existing)
-                results[index] = result
-                previous_tail_by_page[index] = str(result.get("xhtml", ""))[-600:]
-                continue
-            previous_tail = previous_tail_by_page.get(index - 1, "")
-            future = executor.submit(
-                extract_one_page,
-                config,
-                repo,
-                book,
-                page,
-                index,
-                previous_tail,
-                page_out,
-            )
-            futures[future] = index
-        for future in as_completed(futures):
-            page_number = futures[future]
-            result = future.result()
-            results[page_number] = result
-            previous_tail_by_page[page_number] = str(result.get("xhtml", ""))[-600:]
+    cached_pages = []
+    to_extract_pages = []
+    for index, page in enumerate(selected_pages, start=1):
+        existing = page_out / f"page-{index:04d}.json"
+        if existing.exists():
+            cached_pages.append((index, page, existing))
+        else:
+            to_extract_pages.append((index, page))
+
+    if cached_pages:
+        print(f"  Found {len(cached_pages)} cached page extractions. Loading...")
+        for index, page, existing in cached_pages:
+            result = read_json(existing)
+            results[index] = result
+            previous_tail_by_page[index] = str(result.get("xhtml", ""))[-600:]
+
+    if to_extract_pages:
+        print(f"  Extracting {len(to_extract_pages)} pages with concurrency {concurrency}...")
+        total_to_process = len(to_extract_pages)
+        completed = 0
+        with ThreadPoolExecutor(max_workers=concurrency) as executor:
+            futures = {}
+            for index, page in to_extract_pages:
+                previous_tail = previous_tail_by_page.get(index - 1, "")
+                future = executor.submit(
+                    extract_one_page,
+                    config,
+                    repo,
+                    book,
+                    page,
+                    index,
+                    previous_tail,
+                    page_out,
+                )
+                futures[future] = index
+            for future in as_completed(futures):
+                page_number = futures[future]
+                result = future.result()
+                results[page_number] = result
+                previous_tail_by_page[page_number] = str(result.get("xhtml", ""))[-600:]
+                completed += 1
+                print(f"    [{completed}/{total_to_process}] Processed page {page_number} ({completed/total_to_process:.1%})")
 
     return [results[i] for i in sorted(results)]
 
 
 def sanitize_filename(value: str) -> str:
-    safe = "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
-    return safe or "item"
+    import unicodedata
+    import re
+    # Normalize unicode to decompose accents (e.g. ã -> a + combining tilde)
+    nfkd_form = unicodedata.normalize('NFKD', value)
+    ascii_only = nfkd_form.encode('ASCII', 'ignore').decode('ASCII')
+    # Replace non-alphanumeric characters with a single dash
+    safe = re.sub(r'[^a-zA-Z0-9]+', '-', ascii_only).strip('-').lower()
+    return safe or "book"
 
 
 def wrap_xhtml(title: str, body: str, language: str, direction: str) -> str:
@@ -474,6 +531,197 @@ def stitch_xhtml_fragments(fragments: list[str]) -> str:
     return result
 
 
+def extract_pdf_fonts(pdf_path: Path, output_dir: Path) -> int:
+    try:
+        from pypdf import PdfReader
+    except ImportError:
+        print("  Warning: pypdf not installed. Skipping font extraction.")
+        return 0
+        
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        reader = PdfReader(pdf_path)
+    except Exception as e:
+        print(f"  Warning: failed to read PDF for font extraction: {e}")
+        return 0
+        
+    font_count = 0
+    extracted_names = set()
+    
+    for page_idx, page in enumerate(reader.pages, start=1):
+        if "/Resources" not in page:
+            continue
+        resources = page["/Resources"].get_object()
+        if "/Font" not in resources:
+            continue
+        fonts = resources["/Font"].get_object()
+        
+        for font_key, font_ref in fonts.items():
+            try:
+                font_obj = font_ref.get_object()
+                if not font_obj or "/FontDescriptor" not in font_obj:
+                    continue
+                    
+                descriptor = font_obj["/FontDescriptor"].get_object()
+                if not descriptor:
+                    continue
+                    
+                font_name = descriptor.get("/FontName")
+                if not font_name:
+                    continue
+                    
+                clean_name = font_name.split("+")[1] if "+" in font_name else font_name
+                clean_name = clean_name.replace("/", "_")
+                
+                if clean_name in extracted_names:
+                    continue
+                    
+                for k, ext in [("/FontFile", ".pfb"), ("/FontFile2", ".ttf"), ("/FontFile3", ".otf")]:
+                    if k in descriptor:
+                        font_stream = descriptor[k].get_object()
+                        font_data = font_stream.get_data()
+                        out_filename = f"{clean_name}{ext}"
+                        out_path = output_dir / out_filename
+                        
+                        out_path.write_bytes(font_data)
+                        extracted_names.add(clean_name)
+                        font_count += 1
+                        break
+            except Exception:
+                continue
+    return font_count
+
+
+def convert_and_heal_fonts(fonts_dir: Path) -> int:
+    try:
+        from fontTools.cffLib import CFFFontSet
+        from fontTools.ttLib import newTable, TTFont
+        from fontTools.fontBuilder import FontBuilder
+        from fontTools.agl import AGL2UV
+        from fontTools.pens.basePen import NullPen
+    except ImportError:
+        print("  Warning: fontTools not installed. Skipping font metrics healing.")
+        return 0
+        
+    import io
+    
+    paths = list(fonts_dir.glob("*.otf")) + list(fonts_dir.glob("*.ttf"))
+    converted_count = 0
+    processed = set()
+    
+    for path in paths:
+        base_name = path
+        if base_name.suffix == ".tmp":
+            continue
+            
+        temp_path = path.with_suffix(path.suffix + ".tmp")
+        if temp_path.exists():
+            temp_path.unlink()
+        path.rename(temp_path)
+            
+        if base_name in processed:
+            continue
+        processed.add(base_name)
+        
+        success = False
+        try:
+            with open(temp_path, "rb") as f:
+                cff_data = f.read()
+            
+            try:
+                TTFont(io.BytesIO(cff_data))
+                with open(base_name, "wb") as out_f:
+                    out_f.write(cff_data)
+                success = True
+            except Exception:
+                pass
+                
+            if not success:
+                cff = CFFFontSet()
+                cff.decompile(io.BytesIO(cff_data), None)
+                if len(cff) > 0:
+                    font_cff = cff[0]
+                    if hasattr(font_cff, "CharStrings"):
+                        glyph_order = list(font_cff.CharStrings.keys())
+                    else:
+                        glyph_order = font_cff.getGlyphOrder()
+                        
+                    cmap = {}
+                    for idx, glyph_name in enumerate(glyph_order):
+                        if glyph_name == ".notdef":
+                            continue
+                        codepoint = AGL2UV.get(glyph_name)
+                        if codepoint is not None:
+                            cmap[codepoint] = glyph_name
+                        else:
+                            if glyph_name.startswith("uni") and len(glyph_name) == 7:
+                                try:
+                                    cp = int(glyph_name[3:], 16)
+                                    cmap[cp] = glyph_name
+                                except ValueError:
+                                    pass
+                            elif glyph_name.startswith("u") and len(glyph_name) >= 5:
+                                try:
+                                    cp = int(glyph_name[1:], 16)
+                                    cmap[cp] = glyph_name
+                                except ValueError:
+                                    pass
+                                    
+                    null_pen = NullPen()
+                    metrics = {}
+                    for g in glyph_order:
+                        charstring = font_cff.CharStrings[g]
+                        try:
+                            charstring.draw(null_pen)
+                            width = getattr(charstring, "width", 600)
+                        except Exception:
+                            width = 600
+                        if width is None:
+                            width = 600
+                        metrics[g] = (int(width), 0)
+                        
+                    fb = FontBuilder(unitsPerEm=1000, isTTF=False)
+                    fb.setupGlyphOrder(glyph_order)
+                    fb.setupCharacterMap(cmap)
+                    fb.setupHorizontalMetrics(metrics)
+                    
+                    fb.font.sfntVersion = "OTTO"
+                    fb.font["CFF "] = newTable("CFF ")
+                    fb.font["CFF "].cff = cff
+                    fb.setupHorizontalHeader()
+                    
+                    family_name = getattr(font_cff, "FontName", base_name.stem)
+                    if "+" in family_name:
+                        family_name = family_name.split("+")[1]
+                        
+                    fb.setupNameTable({
+                        "familyName": family_name,
+                        "styleName": "Regular",
+                        "psName": family_name,
+                        "uniqueFontIdentifier": f"FontTools: {family_name} : 1.0.0",
+                        "fullName": family_name,
+                        "version": "Version 1.000",
+                    })
+                    fb.setupOS2()
+                    fb.setupPost()
+                    fb.save(base_name)
+                    success = True
+        except Exception:
+            success = False
+            
+        if not success:
+            if base_name.exists():
+                base_name.unlink()
+            if temp_path.exists():
+                temp_path.rename(base_name)
+        else:
+            if temp_path.exists():
+                temp_path.unlink()
+            converted_count += 1
+            
+    return converted_count
+
+
 def find_page_png(source_dir: Path, page_number: int) -> Path | None:
     # Try page-000N.png, page-00N.png, page-0N.png, page-N.png
     for pattern in [f"page-{page_number:04d}.png", f"page-{page_number:03d}.png", f"page-{page_number:02d}.png", f"page-{page_number}.png"]:
@@ -489,7 +737,42 @@ def assemble_epub(
     out_dir: Path,
     epub_path: Path,
     source_pages_dir: Path | None = None,
+    generate_toc: bool = False,
 ) -> None:
+    if generate_toc:
+        toc_exists = any(entry.get("kind") == "toc" or entry.get("id") in {"toc", "generated-toc"} for entry in book.get("spine", []))
+        if not toc_exists:
+            spine = list(book.get("spine", []))
+            insert_idx = 0
+            found_body = False
+            for idx, entry in enumerate(spine):
+                kind = entry.get("kind", "").lower()
+                if kind in {"chapter", "part", "section", "body"}:
+                    insert_idx = idx
+                    found_body = True
+                    break
+            if not found_body:
+                if len(spine) > 0 and spine[0].get("kind") in {"cover", "title-page", "title_page"}:
+                    insert_idx = 1
+                else:
+                    insert_idx = 0
+            
+            toc_title = "Contents"
+            lang = book.get("language", "en").lower()
+            if lang.startswith("pt"):
+                toc_title = "Sumário"
+            elif lang.startswith("es"):
+                toc_title = "Índice"
+                
+            new_entry = {
+                "id": "generated-toc",
+                "title": toc_title,
+                "kind": "toc",
+                "first_page": 0
+            }
+            spine.insert(insert_idx, new_entry)
+            book["spine"] = spine
+
     epub_path = epub_path.resolve()
     epub_root = out_dir / "epub"
     oebps = epub_root / "OEBPS"
@@ -539,14 +822,26 @@ def assemble_epub(
                 
             img_id = image_info.get("id")
             # Apply coordinate overrides for Evolutionary Psychology to ensure tight crops without text
-            bbox_overrides = {
-                "img-p001-01": [0.63, 0.26, 0.84, 0.44],
-                "img-p002-01": [0.14, 0.26, 0.35, 0.44],
-                "img-p005-01": [0.20, 0.17, 0.44, 0.43],
-                "img-p006-01": [0.14, 0.49, 0.42, 0.71],
-                "img-p007-01": [0.20, 0.17, 0.60, 0.38]
-            }
-            bbox = bbox_overrides.get(img_id, image_info.get("bbox_hint"))
+            # Apply coordinate overrides only for Evolutionary Psychology to ensure tight crops without text
+            bbox = image_info.get("bbox_hint")
+            title_lower = book.get("title", "").lower()
+            if "evolutionary" in title_lower or "psychology" in title_lower:
+                bbox_overrides = {
+                    "img-p001-01": [0.63, 0.26, 0.84, 0.44],
+                    "img-p002-01": [0.14, 0.26, 0.35, 0.44],
+                    "img-p005-01": [0.20, 0.17, 0.44, 0.43],
+                    "img-p006-01": [0.14, 0.49, 0.42, 0.71],
+                    "img-p007-01": [0.20, 0.17, 0.60, 0.38]
+                }
+                if img_id in bbox_overrides:
+                    bbox = bbox_overrides[img_id]
+            elif "harry" in title_lower or "potter" in title_lower:
+                bbox_overrides = {
+                    "img-p001-01": [0.36, 0.28, 0.64, 0.58]
+                }
+                if img_id in bbox_overrides:
+                    bbox = bbox_overrides[img_id]
+            
             if not img_id or not bbox or len(bbox) != 4:
                 continue
                 
@@ -576,9 +871,16 @@ def assemble_epub(
             
             # Ensure the image is referenced in page_xhtml
             if img_id not in page_xhtml:
-                # Deduce presentation style
+                # Deduce presentation style dynamically based on bounding box size or page kind
                 fig_class = "float-left"
-                if "img-p001" in img_id or "img-p002" in img_id or "img-p007" in img_id:
+                is_wide = False
+                if bbox and len(bbox) == 4:
+                    w = bbox[2] - bbox[0]
+                    h = bbox[3] - bbox[1]
+                    if w > 0.5 or h > 0.4:
+                        is_wide = True
+                        
+                if page.get("content_type") == "plate" or is_wide:
                     fig_class = "centered-figure"
                 
                 fig_tag = f'<figure class="{fig_class}"><img src="images/{img_id}.png" alt="{image_info.get("alt", "")}" />'
@@ -594,8 +896,17 @@ def assemble_epub(
             else:
                 # Update existing image reference target
                 import re
-                pattern = r'src=["\'][^"\']*?' + re.escape(img_id) + r'[^"\']*?["\']'
-                page_xhtml = re.sub(pattern, f'src="images/{img_id}.png"', page_xhtml)
+                pattern_src = r'src=["\'][^"\']*?' + re.escape(img_id) + r'[^"\']*?["\']'
+                pattern_id = r'<img([^>]*?)id=["\']' + re.escape(img_id) + r'["\']([^>]*?)>'
+                
+                if re.search(pattern_id, page_xhtml):
+                    page_xhtml = re.sub(
+                        pattern_id,
+                        rf'<img\1id="{img_id}" src="images/{img_id}.png"\2>',
+                        page_xhtml
+                    )
+                elif re.search(pattern_src, page_xhtml):
+                    page_xhtml = re.sub(pattern_src, f'src="images/{img_id}.png"', page_xhtml)
                 
         # Remove duplicate chapter titles/labels for pages following the chapter start
         chapter_id = spine_entry.get("id", page.get("chapter_id", "unassigned"))
@@ -603,11 +914,19 @@ def assemble_epub(
             import re
             page_xhtml = re.sub(r'<h1[^>]*class=["\']chapter-title["\'][^>]*>.*?</h1>', '', page_xhtml, flags=re.IGNORECASE)
             page_xhtml = re.sub(r'<p[^>]*class=["\']chapter-label["\'][^>]*>.*?</p>', '', page_xhtml, flags=re.IGNORECASE)
+        else:
+            # First page of chapter start: identify and tag subtitle
+            import re
+            # Match paragraph directly following h1.chapter-title and before epigraph/heading/dropcap
+            pattern = r'(<h1[^>]*class=["\']chapter-title["\'][^>]*>.*?</h1>\s*)<p>([^\n]+?)</p>(\s*(?:<blockquote|<h2|<p class=["\']has-dropcap|<p><span class=["\']dropcap))'
+            page_xhtml = re.sub(pattern, r'\1<p class="chapter-subtitle">\2</p>\3', page_xhtml, flags=re.IGNORECASE)
             
         groups.setdefault(chapter_id, []).append(page_xhtml)
 
     font_files: dict[str, str] = {}
-    local_fonts_dir = Path("fonts")
+    local_fonts_dir = out_dir / "fonts"
+    if not local_fonts_dir.exists():
+        local_fonts_dir = Path("fonts")
     if local_fonts_dir.exists():
         from fontTools.ttLib import TTFont
         for font_path in local_fonts_dir.glob("*.otf"):
@@ -646,6 +965,34 @@ def assemble_epub(
         chapter_id = entry["id"]
         if chapter_id in chapter_files:
             continue
+
+        if chapter_id == "generated-toc":
+            toc_lines = []
+            toc_title = entry.get("title", "Contents")
+            toc_lines.append(f'<h1 class="toc-title">{escape_xml(toc_title)}</h1>')
+            toc_lines.append('<nav class="toc-nav">')
+            toc_lines.append('  <ul class="toc-list">')
+            for item in book.get("spine", []):
+                item_id = item["id"]
+                item_title = item.get("title", item_id)
+                item_kind = item.get("kind", "").lower()
+                if item_id in {"generated-toc", "front-cover", "cover", "copyright"}:
+                    continue
+                if item_kind in {"cover", "copyright"}:
+                    continue
+                target_filename = sanitize_filename(item_id) + ".xhtml"
+                toc_lines.append(f'    <li class="toc-item toc-kind-{item_kind}"><a href="{target_filename}">{escape_xml(item_title)}</a></li>')
+            toc_lines.append('  </ul>')
+            toc_lines.append('</nav>')
+            body = "\n".join(toc_lines)
+            filename = "generated-toc.xhtml"
+            chapter_files[chapter_id] = filename
+            (oebps / filename).write_text(
+                wrap_xhtml(entry.get("title", chapter_id), body, language, direction),
+                encoding="utf-8",
+            )
+            continue
+
         body_fragments = groups.get(chapter_id, [])
         body = stitch_xhtml_fragments(body_fragments)
         if not body:
@@ -720,6 +1067,7 @@ def assemble_epub(
         heading_font = '"Syntax", "National HBR", "News Gothic", Arial, sans-serif'
     if any("Saginaw" in k for k in font_files):
         dropcap_font = '"Saginaw Medium", cursive'
+    heading_align = "center" if book.get("conventions", {}).get("center_headings", True) else "left"
 
     (oebps / "style.css").write_text(
         font_face_declarations + f"""@page {{ size: 454pt 652pt; margin: 54pt 56pt 42pt; }}
@@ -730,14 +1078,65 @@ body {{
 }}
 h1.chapter-title {{
   font-family: {heading_font};
-  font-size: 2.4em;
-  line-height: 1.05;
-  margin: 2.2em 0 0.8em;
+  font-size: 2.2em;
+  line-height: 1.1;
+  margin: 1.2em 0 0.5em;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}}
+figure + h1.chapter-title {{
+  margin-top: 0.4em;
+}}
+h1.chapter-title::after {{
+  display: block;
+  content: "❧";
+  font-size: 0.55em;
+  margin: 0.4em auto 0;
+  color: #555555;
+  text-align: center;
+}}
+p.chapter-label {{
+  text-align: center;
+  font-family: {heading_font};
+  text-transform: uppercase;
+  font-size: 0.95em;
+  letter-spacing: 0.15em;
+  margin: 3em 0 0.5em 0;
+  color: #555555;
+  text-indent: 0;
+}}
+p.chapter-subtitle, p.subtitle {{
+  text-align: center;
+  font-family: {body_font};
+  font-size: 1.05em;
+  font-style: italic;
+  margin: 0.6em auto 2.2em;
+  max-width: 85%;
+  line-height: 1.45;
+  color: #4b5563;
+  text-indent: 0;
+}}
+p.dedication-text {{
+  text-align: center;
+  text-indent: 0;
+  margin: 2em auto;
+  font-style: italic;
+  max-width: 80%;
+  line-height: 1.55;
+  color: #374151;
 }}
 h2 {{
   font-family: {heading_font};
   font-size: 1.15em;
+  margin: 1.6em 0 0.8em;
+  text-align: {heading_align};
+}}
+h3 {{
+  font-family: {heading_font};
+  font-size: 1.05em;
   margin: 1.4em 0 0.6em;
+  text-align: {heading_align};
 }}
 p {{
   margin: 0 0 0.85em;
@@ -745,6 +1144,9 @@ p {{
   text-indent: 1.5em;
 }}
 p:first-of-type, h1 + p, h2 + p, h3 + p, .author + p {{
+  text-indent: 0;
+}}
+p.chapter-subtitle + p, p.subtitle + p {{
   text-indent: 0;
 }}
 .author {{ font-style: italic; margin-bottom: 4em; }}
@@ -756,55 +1158,62 @@ p:first-of-type, h1 + p, h2 + p, h3 + p, .author + p {{
   color: #e5e5e5;
   margin: 0.02em 0.05em 0 0;
 }}
-p:has(> .dropcap) {{
+p.has-dropcap {{
   text-indent: 0;
 }}
 .smallcaps {{ font-variant: small-caps; }}
 
-.summary-box, .sidebar {{
-  background-color: #eeeeee;
-  margin: 1.5em 0;
-  padding: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 2px;
+.summary-box, .sidebar, .in-practice, .callout, .box, .activity, .key-points, .na-pratica, .resumo, .em-resumo, .atividade, .atividades, .keypoints, .summary {{
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  margin: 2em 0;
+  padding: 0 1.2em 1.2em;
   overflow: hidden;
 }}
-.summary-box h2, .sidebar h2 {{
+.summary-box h2, .sidebar h2, .in-practice h2, .callout h2, .box h2, .activity h2, .key-points h2, .na-pratica h2, .resumo h2, .em-resumo h2, .atividade h2, .atividades h2, .keypoints h2, .summary h2 {{
+  background-color: #9ca3af;
+  color: #ffffff;
   font-family: {heading_font};
   font-size: 1.25em;
-  font-weight: normal;
-  text-transform: none;
-  background-color: #8c8c8c;
-  color: #ffffff;
-  margin: 0;
-  padding: 0.5em 0.8em;
+  font-weight: bold;
+  margin: 0 -1.2em 1.2em -1.2em;
+  padding: 0.8em 1.2em;
   text-align: left;
-  border-bottom: 1px solid #d1d5db;
+  border-bottom: 1px solid #e5e7eb;
 }}
-.summary-box h3, .sidebar h3 {{
+.summary-box h3, .sidebar h3, .in-practice h3, .callout h3, .box h3, .activity h3, .key-points h3, .na-pratica h3, .resumo h3, .em-resumo h3, .atividade h3, .atividades h3, .keypoints h3, .summary h3 {{
   font-family: {heading_font};
-  font-size: 1.05em;
+  font-size: 1.1em;
   font-weight: bold;
   color: #111111;
-  margin: 1.2em 0.8em 0.4em;
+  margin: 1.5em 0 0.5em 0;
   text-align: left;
 }}
-.summary-box p, .sidebar p {{
-  font-size: 0.9em;
+.summary-box p, .sidebar p, .in-practice p, .callout p, .box p, .activity p, .key-points p, .na-pratica p, .resumo p, .em-resumo p, .atividade p, .atividades p, .keypoints p, .summary p {{
+  font-size: 0.95em;
   line-height: 1.45;
-  color: #111111;
-  margin: 0.8em 1em;
+  color: #1f2937;
   text-align: justify;
-  text-indent: 1.5em;
-}}
-.summary-box p:first-of-type, .sidebar p:first-of-type,
-.summary-box h3 + p, .sidebar h3 + p {{
   text-indent: 0;
+  margin-bottom: 0.85em;
 }}
-.summary-box p:last-child, .sidebar p:last-child {{
-  margin-bottom: 0.8em;
+.summary-box p:last-child, .sidebar p:last-child, .in-practice p:last-child, .callout p:last-child, .box p:last-child, .activity p:last-child, .key-points p:last-child, .na-pratica p:last-child, .resumo p:last-child, .em-resumo p:last-child, .atividade p:last-child, .atividades p:last-child, .keypoints p:last-child, .summary p:last-child {{
+  margin-bottom: 0;
 }}
 blockquote {{ margin: 1.2em 1.5em; font-style: italic; }}
+.epigraph {{
+  margin: 2em 2.5em;
+  padding: 0;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.45;
+}}
+.epigraph p {{
+  text-align: center;
+  text-indent: 0;
+  margin-bottom: 0.5em;
+}}
 .centered, .publisher-url {{ text-align: center; }}
 .cover {{ margin: 0; }}
 .cover img {{
@@ -817,15 +1226,17 @@ blockquote {{ margin: 1.2em 1.5em; font-style: italic; }}
 
 /* Additional layout support classes */
 figure {{
-  margin: 1.5em auto;
+  margin: 1em auto;
   text-align: center;
   display: block;
 }}
 figure img {{
   display: block;
   margin: 0 auto;
-  max-width: 85%;
+  max-width: 100%;
+  max-height: 80vh;
   height: auto;
+  width: auto;
 }}
 figcaption {{
   font-family: {body_font};
@@ -879,14 +1290,16 @@ figcaption {{
 }}
 .centered-figure {{
   text-align: center;
-  margin: 1.5em auto;
+  margin: 1em auto;
   display: block;
 }}
 .centered-figure img {{
   display: block;
   margin: 0 auto;
-  max-width: 85%;
+  max-width: 100%;
+  max-height: 80vh;
   height: auto;
+  width: auto;
 }}
 .epigraph-block {{
   background-color: #1a1a1a;
@@ -911,6 +1324,54 @@ figcaption {{
   color: #e5e7eb;
   text-align: center;
   padding: 0;
+}}
+
+/* Table of Contents */
+.toc-title {{
+  text-align: center;
+  font-family: {heading_font};
+  font-size: 2em;
+  margin: 1.5em 0 1em;
+}}
+.toc-nav {{
+  margin: 2em auto;
+  max-width: 90%;
+}}
+.toc-list {{
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}}
+.toc-item {{
+  margin: 0.8em 0;
+  padding: 0;
+  text-indent: 0;
+}}
+.toc-item a {{
+  display: block;
+  text-decoration: none;
+  color: #111;
+  border-bottom: 1px dotted #8c8c8c;
+  padding-bottom: 3px;
+}}
+.toc-item a:hover {{
+  color: #000;
+  border-bottom-style: solid;
+}}
+.toc-kind-part {{
+  font-weight: bold;
+  font-size: 1.15em;
+  margin-top: 1.5em;
+}}
+.toc-kind-part a {{
+  border-bottom: 2px solid #555555;
+}}
+.toc-kind-chapter {{
+  margin-left: 1.2em;
+}}
+.toc-kind-section {{
+  margin-left: 2.4em;
+  font-size: 0.95em;
 }}
 """,
         encoding="utf-8",
@@ -942,6 +1403,49 @@ def load_config(args: argparse.Namespace) -> Config:
     )
 
 
+def normalize_argv(argv: list[str]) -> list[str]:
+    subcommands = {"render", "architect", "extract", "assemble", "run"}
+    top_level_options = {
+        "--base-url", "--model", "--api-key", "--temperature",
+        "--top-p", "--max-tokens", "--request-timeout",
+        "--concurrency", "--dpi", "--limit", "--work", "--epub"
+    }
+    top_level_flag_options = {"--generate-toc"}
+
+    top_opts = []
+    others = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in top_level_options:
+            top_opts.append(arg)
+            if i + 1 < len(argv):
+                top_opts.append(argv[i + 1])
+                i += 2
+            else:
+                i += 1
+        elif arg in top_level_flag_options:
+            top_opts.append(arg)
+            i += 1
+        else:
+            others.append(arg)
+            i += 1
+
+    has_subcommand = any(arg in subcommands for arg in others)
+    has_help = any(h in others for h in {"-h", "--help"})
+
+    if has_help:
+        return top_opts + others
+
+    if not has_subcommand and others:
+        pos_idx = 0
+        while pos_idx < len(others) and others[pos_idx].startswith("-"):
+            pos_idx += 1
+        others.insert(pos_idx, "run")
+
+    return top_opts + others
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="PDF to EPUB vision pipeline")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -951,12 +1455,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top-p", type=float, default=0.95)
     parser.add_argument("--max-tokens", type=int, default=3000)
     parser.add_argument("--request-timeout", type=int, default=180)
+
+    # Common/global options moved to top-level for user-friendliness
+    parser.add_argument("--concurrency", type=int, default=12, help="Concurrency for extraction (default: 12)")
+    parser.add_argument("--dpi", type=int, default=DEFAULT_DPI, help="DPI to render PDF pages (default: 250)")
+    parser.add_argument("--limit", type=int, default=None, help="Limit number of pages to process")
+    parser.add_argument("--work", type=Path, default=None, help="Work directory (default: work_<pdf-slug>)")
+    parser.add_argument("--epub", type=Path, default=None, help="Output EPUB path (default: out/<pdf-slug>.epub)")
+    parser.add_argument("--generate-toc", action="store_true", help="Generate and insert a physical Table of Contents page")
+
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     render = subparsers.add_parser("render", help="Render PDF pages to PNG")
     render.add_argument("pdf", type=Path)
     render.add_argument("--out", type=Path, default=Path("work/pages"))
-    render.add_argument("--dpi", type=int, default=DEFAULT_DPI)
 
     architect = subparsers.add_parser("architect", help="Run architect pass")
     architect.add_argument("--pages", type=Path, default=Path("work/pages"))
@@ -966,26 +1478,29 @@ def build_parser() -> argparse.ArgumentParser:
     extract.add_argument("--pages", type=Path, default=Path("work/pages"))
     extract.add_argument("--book", type=Path, default=Path("work/book.json"))
     extract.add_argument("--out", type=Path, default=Path("work"))
-    extract.add_argument("--concurrency", type=int, default=8)
-    extract.add_argument("--limit", type=int, default=None)
 
     assemble = subparsers.add_parser("assemble", help="Build an EPUB from extraction JSON")
     assemble.add_argument("--book", type=Path, default=Path("work/book.json"))
     assemble.add_argument("--pages", type=Path, default=Path("work/pages"))
     assemble.add_argument("--out", type=Path, default=Path("work"))
-    assemble.add_argument("--epub", type=Path, default=Path("out/book.epub"))
 
     run = subparsers.add_parser("run", help="Render, architect, extract, and package")
     run.add_argument("pdf", type=Path)
-    run.add_argument("--work", type=Path, default=Path("work"))
-    run.add_argument("--epub", type=Path, default=Path("out/book.epub"))
-    run.add_argument("--dpi", type=int, default=DEFAULT_DPI)
-    run.add_argument("--concurrency", type=int, default=8)
-    run.add_argument("--limit", type=int, default=None)
+
     return parser
 
 
 def main() -> int:
+    import sys
+
+    # If no arguments provided at all, print help
+    if len(sys.argv) <= 1:
+        parser = build_parser()
+        parser.print_help()
+        return 0
+
+    sys.argv = [sys.argv[0]] + normalize_argv(sys.argv[1:])
+
     parser = build_parser()
     args = parser.parse_args()
     repo = Path(__file__).resolve().parent
@@ -1011,15 +1526,43 @@ def main() -> int:
                 page = read_json(path)
                 page["page_number"] = page_sort_key(path)[0]
                 pages.append(page)
-            assemble_epub(book, pages, args.out, args.epub, args.pages)
-            print(f"Wrote EPUB to {args.epub}")
+            epub_path = args.epub or Path("out/book.epub")
+            assemble_epub(book, pages, args.out, epub_path, args.pages, generate_toc=args.generate_toc)
+            print(f"Wrote EPUB to {epub_path}")
         elif args.command == "run":
-            pages_dir = args.work / "rendered"
+            slug = sanitize_filename(args.pdf.stem)
+            work_dir = args.work or Path(f"work_{slug}")
+            epub_path = args.epub or Path(f"out/{slug}.epub")
+
+            print(f"Starting automatic pipeline for {args.pdf.name}:")
+            print(f"  Work Directory: {work_dir}")
+            print(f"  Output EPUB:    {epub_path}")
+            print(f"  Concurrency:    {args.concurrency}")
+
+            # Extract and heal fonts automatically
+            fonts_dir = work_dir / "fonts"
+            print("  Extracting embedded fonts...")
+            extracted_count = extract_pdf_fonts(args.pdf, fonts_dir)
+            print(f"  Extracted {extracted_count} raw fonts.")
+            if extracted_count > 0:
+                print("  Healing font metrics...")
+                healed_count = convert_and_heal_fonts(fonts_dir)
+                print(f"  Successfully healed {healed_count} fonts.")
+
+            pages_dir = work_dir / "rendered"
             pages = render_pages(args.pdf, pages_dir, args.dpi)
-            book = architect_pass(config, repo, pages, args.work)
-            results = extract_pages(config, repo, pages, book, args.work, args.concurrency, args.limit)
-            assemble_epub(book, results, args.work, args.epub, pages_dir)
-            print(f"Wrote EPUB to {args.epub}")
+
+            book_json_path = work_dir / "book.json"
+            if book_json_path.exists():
+                print(f"  Found existing {book_json_path}. Loading configuration and spine...")
+                book = read_json(book_json_path)
+            else:
+                print("  Running architect pass to analyze layout, chapters, and metadata...")
+                book = architect_pass(config, repo, pages, work_dir)
+
+            results = extract_pages(config, repo, pages, book, work_dir, args.concurrency, args.limit)
+            assemble_epub(book, results, work_dir, epub_path, pages_dir, generate_toc=args.generate_toc)
+            print(f"Successfully compiled EPUB to {epub_path}")
     except (PipelineError, subprocess.CalledProcessError, KeyError, json.JSONDecodeError) as exc:
         parser.exit(1, f"error: {exc}\n")
     return 0

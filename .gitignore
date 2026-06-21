@@ -1,5 +1,7 @@
 work/
+work_*
 out/
 *.epub
 __pycache__/
 *.pyc
+request_payload.json
