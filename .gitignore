@@ -5,3 +5,5 @@ out/
 __pycache__/
 *.pyc
 request_payload.json
+venv/
+.venv/
