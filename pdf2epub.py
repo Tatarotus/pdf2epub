@@ -293,6 +293,29 @@ def extract_one_page(
     system_prompt = read_text(repo / "prompts/system.md")
     extract_prompt = read_text(repo / "prompts/extract.md")
     entry = spine_entry_for_page(book, page_number)
+    
+    # Check if this is a hybrid page (starts a new section, but has a previous section)
+    is_hybrid = False
+    prev_entry = None
+    spine = sorted([item for item in book.get("spine", []) if item.get("id") != "generated-toc"], key=lambda item: item.get("first_page", 1))
+    for idx, e in enumerate(spine):
+        if e["id"] == entry.get("id") and idx > 0:
+            prev_entry = spine[idx - 1]
+            if prev_entry.get("first_page", 1) < page_number and entry.get("first_page", 1) == page_number:
+                is_hybrid = True
+            break
+            
+    warnings = list(book.get("extraction_warnings", []))
+    if is_hybrid and prev_entry:
+        warnings.append(
+            f"IMPORTANT: This page starts a new section/chapter ('{entry.get('title')}'), but the top of the page contains the end of the previous section ('{prev_entry.get('title')}'). "
+            "You MUST extract the text at the top of the page (which belongs to the previous section) first, followed by the new section header and its content. Do NOT ignore the text at the top of the page!"
+        )
+        
+    kind_hint = page_kind_hint(entry, page_number)
+    if is_hybrid:
+        kind_hint = f"{kind_hint} (hybrid: starts with the end of previous section at the top)"
+
     values = {
         "PAGE_NUMBER": page_number,
         "BOOK_TITLE": book.get("title", "Unknown"),
@@ -303,8 +326,8 @@ def extract_one_page(
         "CURRENT_CHAPTER_TITLE": entry.get("title", "Unknown"),
         "EXPECTED_RUNNING_HEADER_OR_null": entry.get("running_header") or "null",
         "EXPECTED_FOLIO_OR_null": expected_folio(book, entry, page_number) or "null",
-        "PAGE_KIND_HINT": page_kind_hint(entry, page_number),
-        "ANY_EXTRACTION_WARNINGS_FOR_THIS_REGION": "; ".join(book.get("extraction_warnings", [])) or "none",
+        "PAGE_KIND_HINT": kind_hint,
+        "ANY_EXTRACTION_WARNINGS_FOR_THIS_REGION": "; ".join(warnings) or "none",
         "TITLE": entry.get("title", "Unknown"),
     }
     prompt = render_extract_prompt(extract_prompt, values)
@@ -790,12 +813,42 @@ def assemble_epub(
     chapter_footnotes: dict[str, list[str]] = {}
     image_files: dict[str, str] = {}
     cover_page: int | None = None
+    
+    # Sort spine to help detect previous chapters
+    spine = sorted([item for item in book.get("spine", []) if item.get("id") != "generated-toc"], key=lambda item: item.get("first_page", 1))
+
     for page in pages:
         page_number = int(page.get("page_number", 1))
         spine_entry = spine_entry_for_page(book, page_number)
         chapter_id = spine_entry.get("id", page.get("chapter_id", "unassigned"))
         
         page_xhtml = page.get("xhtml", "")
+
+        # Check if this page is a hybrid page (starts a new section, but has a previous section)
+        is_hybrid = False
+        prev_chapter_id = None
+        for idx, e in enumerate(spine):
+            if e["id"] == chapter_id and idx > 0:
+                prev_entry = spine[idx - 1]
+                if prev_entry.get("first_page", 1) < page_number and e.get("first_page", 1) == page_number:
+                    is_hybrid = True
+                    prev_chapter_id = prev_entry["id"]
+                break
+                
+        if is_hybrid and prev_chapter_id:
+            import re
+            # Find the header tag to split the XHTML
+            match = re.search(r'<(h[1-6])\b[^>]*>', page_xhtml, flags=re.IGNORECASE)
+            if match:
+                split_idx = match.start()
+                top_part = page_xhtml[:split_idx].strip()
+                bottom_part = page_xhtml[split_idx:].strip()
+                
+                # Append top part to the previous chapter
+                if top_part:
+                    groups.setdefault(prev_chapter_id, []).append(top_part)
+                # Use bottom part for the current chapter
+                page_xhtml = bottom_part
         
         # 1. Process page footnotes and guarantee unique IDs
         page_footnotes = page.get("footnotes", [])
