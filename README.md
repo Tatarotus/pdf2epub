@@ -88,6 +88,7 @@ OpenAI-compatible vision endpoint:
 
 - API base URL: `https://dav.smre.run.place/v1`
 - Vision model: `qwen/qwen3.5-397b-a17b`
+- **Fallback API & Robustness:** Automatic retries on network/server errors, dynamic response format negotiation, max-token escalation on truncation/parsing errors, and automatic fallback to the Gemini API (`gemini-3.5-flash`) if `GEMINI_API_KEY` is configured.
 
 ### Quickest Start
 

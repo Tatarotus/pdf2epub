@@ -31,7 +31,7 @@ from PIL import Image
 
 
 DEFAULT_BASE_URL = "https://dav.smre.run.place/v1"
-DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
+DEFAULT_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
 DEFAULT_DPI = 250
 
 
@@ -161,7 +161,7 @@ def chat_completion(
     messages: list[dict[str, Any]],
     max_tokens: int | None = None,
     retry_json: bool = True,
-    use_response_format: bool = True,
+    use_response_format: bool = False,
 ) -> dict[str, Any]:
     endpoint = config.base_url.rstrip("/") + "/chat/completions"
     payload = {
@@ -171,59 +171,149 @@ def chat_completion(
         "top_p": config.top_p,
         "max_tokens": max_tokens or config.max_tokens,
     }
-    if use_response_format:
-        payload["response_format"] = {"type": "json_object"}
+    current_use_response_format = use_response_format
+    current_model = payload["model"]
+    
+    attempt = 0
+    max_attempts = 4
+    
+    while attempt < max_attempts:
+        if current_use_response_format:
+            payload["response_format"] = {"type": "json_object"}
+        elif "response_format" in payload:
+            del payload["response_format"]
 
-    body = json.dumps(payload).encode("utf-8")
-    # Debug: write payload to request_payload.json
-    try:
-        with open("request_payload.json", "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-    except Exception:
-        pass
-    request = urllib.request.Request(
-        endpoint,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {config.api_key}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    for attempt in range(3):
+        body = json.dumps(payload).encode("utf-8")
+        try:
+            with open("request_payload.json", "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+        except Exception:
+            pass
+
+        request = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
         try:
             with urllib.request.urlopen(request, timeout=config.request_timeout) as response:
                 response_body = response.read().decode("utf-8")
-            break
+            
+            data = json.loads(response_body)
+            content = data["choices"][0]["message"]["content"]
+            if not content:
+                raise KeyError("content is empty or null")
+
+            finish_reason = data["choices"][0].get("finish_reason")
+            if finish_reason == "length":
+                raise json.JSONDecodeError("Generation truncated due to max_tokens limit", content, len(content))
+
+            try:
+                return extract_json_object(content)
+            except json.JSONDecodeError:
+                if retry_json:
+                    print("  Warning: Response was not valid JSON. Retrying with corrective prompt...")
+                    retry_messages = messages + [
+                        {
+                            "role": "user",
+                            "content": "Previous output was not valid JSON. Return only the JSON object.",
+                        }
+                    ]
+                    return chat_completion(
+                        config,
+                        retry_messages,
+                        max_tokens=payload["max_tokens"],
+                        retry_json=False,
+                        use_response_format=current_use_response_format
+                    )
+                else:
+                    raise
+
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            if use_response_format and exc.code in {400, 500}:
-                print("  Warning: API request failed with HTTP 500/400. Retrying without response_format...")
-                return chat_completion(config, messages, max_tokens, retry_json, use_response_format=False)
-            if exc.code in {502, 503, 504} and attempt < 2:
-                time.sleep(2**attempt)
+            if current_use_response_format and exc.code in {400, 500, 502, 503, 504}:
+                print(f"  Warning: API request failed with HTTP {exc.code}. Retrying without response_format...")
+                current_use_response_format = False
+                continue
+            if exc.code in {400, 429, 500, 502, 503, 504} and os.getenv("GEMINI_API_KEY") and current_model != "gemini-3.5-flash":
+                print(f"  Warning: HTTP {exc.code} from custom proxy. Switching fallback to Gemini API (gemini-3.5-flash)...")
+                current_model = "gemini-3.5-flash"
+                payload["model"] = "gemini-3.5-flash"
+                endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                config = Config(
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                    model="gemini-3.5-flash",
+                    api_key=os.getenv("GEMINI_API_KEY"),
+                    temperature=config.temperature,
+                    top_p=config.top_p,
+                    max_tokens=payload["max_tokens"],
+                    request_timeout=config.request_timeout
+                )
+                current_use_response_format = False
+                continue
+            attempt += 1
+            if attempt < max_attempts:
+                sleep_time = 5 * attempt
+                print(f"  Warning: HTTP {exc.code} on attempt {attempt}. Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
                 continue
             raise PipelineError(f"API request failed with HTTP {exc.code}: {error_body}") from exc
+
         except urllib.error.URLError as exc:
-            if attempt < 2:
-                time.sleep(2**attempt)
+            attempt += 1
+            if attempt < max_attempts:
+                sleep_time = 5 * attempt
+                print(f"  Warning: Connection error on attempt {attempt}: {exc}. Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
                 continue
             raise PipelineError(f"API request failed: {exc}") from exc
 
-    data = json.loads(response_body)
-    content = data["choices"][0]["message"]["content"]
-    try:
-        return extract_json_object(content)
-    except json.JSONDecodeError:
-        if not retry_json:
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            if current_use_response_format:
+                print(f"  Warning: API response parsing failed ({exc}). Retrying without response_format...")
+                current_use_response_format = False
+                continue
+            current_max_tokens = payload["max_tokens"]
+            if current_max_tokens < 8000:
+                new_max_tokens = min(current_max_tokens + 2000, 8000)
+                payload["max_tokens"] = new_max_tokens
+                attempt += 1
+                if attempt < max_attempts:
+                    sleep_time = 5 * attempt
+                    print(f"  Warning: Response error on current model ({exc}). Escalating max_tokens to {new_max_tokens} and retrying in {sleep_time}s...")
+                    time.sleep(sleep_time)
+                    continue
+            if os.getenv("GEMINI_API_KEY") and current_model != "gemini-3.5-flash":
+                print(f"  Warning: Parsing/truncation error on custom proxy ({exc}) and max_tokens limit reached. Switching fallback to Gemini API (gemini-3.5-flash)...")
+                current_model = "gemini-3.5-flash"
+                payload["model"] = "gemini-3.5-flash"
+                endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                config = Config(
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                    model="gemini-3.5-flash",
+                    api_key=os.getenv("GEMINI_API_KEY"),
+                    temperature=config.temperature,
+                    top_p=config.top_p,
+                    max_tokens=payload["max_tokens"],
+                    request_timeout=config.request_timeout
+                )
+                current_use_response_format = False
+                continue
+            attempt += 1
+            if attempt < max_attempts:
+                sleep_time = 5 * attempt
+                print(f"  Warning: Response error on attempt {attempt} ({exc}). Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
+                continue
+            if 'response_body' in locals():
+                print(f"Error parsing API response: {exc}")
+                print(f"Response body: {response_body}")
             raise
-        retry_messages = messages + [
-            {
-                "role": "user",
-                "content": "Previous output was not valid JSON. Return only the JSON object.",
-            }
-        ]
-        return chat_completion(config, retry_messages, max_tokens=max_tokens, retry_json=False, use_response_format=use_response_format)
 
 
 def architect_pass(config: Config, repo: Path, pages: list[Path], out_dir: Path) -> dict[str, Any]:
@@ -880,11 +970,21 @@ def assemble_epub(
             title_lower = book.get("title", "").lower()
             if "evolutionary" in title_lower or "psychology" in title_lower:
                 bbox_overrides = {
-                    "img-p001-01": [0.63, 0.26, 0.84, 0.44],
-                    "img-p002-01": [0.14, 0.26, 0.35, 0.44],
-                    "img-p005-01": [0.20, 0.17, 0.44, 0.43],
-                    "img-p006-01": [0.14, 0.49, 0.42, 0.71],
-                    "img-p007-01": [0.20, 0.17, 0.60, 0.38]
+                    "img-p006-01": [0.63, 0.26, 0.84, 0.44],
+                    "img-p007-01": [0.14, 0.26, 0.35, 0.44],
+                    "img-p010-01": [0.20, 0.17, 0.44, 0.43],
+                    "img-p011-01": [0.14, 0.49, 0.42, 0.71],
+                    "img-p012-01": [0.20, 0.17, 0.60, 0.38],
+                    "img-p017-01": [0.145, 0.505, 0.375, 0.725],
+                    "img-p019-01": [0.145, 0.175, 0.375, 0.395],
+                    "img-p021-01": [0.145, 0.485, 0.375, 0.725],
+                    "img-p034-01": [0.20, 0.17, 0.60, 0.415],
+                    "img-p040-01": [0.65, 0.26, 0.86, 0.44],
+                    "img-p053-01": [0.18, 0.175, 0.46, 0.44],
+                    "img-p053-02": [0.515, 0.175, 0.79, 0.365],
+                    "img-p053-03": [0.515, 0.38, 0.79, 0.515],
+                    "img-p057-01": [0.145, 0.175, 0.39, 0.425],
+                    "img-p057-02": [0.405, 0.19, 0.805, 0.425]
                 }
                 if img_id in bbox_overrides:
                     bbox = bbox_overrides[img_id]
@@ -1424,6 +1524,38 @@ figcaption {{
 }}
 .toc-kind-section {{
   margin-left: 2.4em;
+  font-size: 0.95em;
+}}
+
+/* Table layout styles */
+table {{
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5em 0;
+  font-size: 0.9em;
+  line-height: 1.4;
+  page-break-inside: avoid;
+}}
+th, td {{
+  padding: 0.6em 0.85em;
+  text-align: left;
+  border-bottom: 1px solid #d1d5db;
+  vertical-align: top;
+}}
+th {{
+  font-family: {heading_font};
+  font-weight: bold;
+  background-color: #f3f4f6;
+  border-bottom: 2px solid #9ca3af;
+}}
+tr:nth-child(even) td {{
+  background-color: #f9fafb;
+}}
+caption {{
+  font-family: {heading_font};
+  font-weight: bold;
+  margin-bottom: 0.6em;
+  text-align: left;
   font-size: 0.95em;
 }}
 """,
