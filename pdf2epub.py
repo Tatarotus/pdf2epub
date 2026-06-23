@@ -31,7 +31,7 @@ from PIL import Image
 
 
 DEFAULT_BASE_URL = "https://dav.smre.run.place/v1"
-DEFAULT_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
+DEFAULT_MODEL = "qwen/qwen3.5-397b-a17b"
 DEFAULT_DPI = 250
 
 
@@ -240,22 +240,28 @@ def chat_completion(
                 print(f"  Warning: API request failed with HTTP {exc.code}. Retrying without response_format...")
                 current_use_response_format = False
                 continue
-            if exc.code in {400, 429, 500, 502, 503, 504} and os.getenv("GEMINI_API_KEY") and current_model != "gemini-3.5-flash":
-                print(f"  Warning: HTTP {exc.code} from custom proxy. Switching fallback to Gemini API (gemini-3.5-flash)...")
-                current_model = "gemini-3.5-flash"
-                payload["model"] = "gemini-3.5-flash"
-                endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-                config = Config(
-                    base_url="https://generativelanguage.googleapis.com/v1beta/openai",
-                    model="gemini-3.5-flash",
-                    api_key=os.getenv("GEMINI_API_KEY"),
-                    temperature=config.temperature,
-                    top_p=config.top_p,
-                    max_tokens=payload["max_tokens"],
-                    request_timeout=config.request_timeout
-                )
-                current_use_response_format = False
-                continue
+            if exc.code in {400, 429, 500, 502, 503, 504}:
+                if current_model == "qwen/qwen3.5-397b-a17b":
+                    print(f"  Warning: HTTP {exc.code} on Qwen. Switching fallback to Llama model (meta/llama-4-maverick-17b-128e-instruct)...")
+                    current_model = "meta/llama-4-maverick-17b-128e-instruct"
+                    payload["model"] = "meta/llama-4-maverick-17b-128e-instruct"
+                    continue
+                elif current_model == "meta/llama-4-maverick-17b-128e-instruct" and os.getenv("GEMINI_API_KEY"):
+                    print(f"  Warning: HTTP {exc.code} on Llama. Switching fallback to Gemini API (gemini-3.5-flash)...")
+                    current_model = "gemini-3.5-flash"
+                    payload["model"] = "gemini-3.5-flash"
+                    endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+                    config = Config(
+                        base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                        model="gemini-3.5-flash",
+                        api_key=os.getenv("GEMINI_API_KEY") or "",
+                        temperature=config.temperature,
+                        top_p=config.top_p,
+                        max_tokens=payload["max_tokens"],
+                        request_timeout=config.request_timeout
+                    )
+                    current_use_response_format = False
+                    continue
             attempt += 1
             if attempt < max_attempts:
                 sleep_time = 5 * attempt
@@ -288,15 +294,20 @@ def chat_completion(
                     print(f"  Warning: Response error on current model ({exc}). Escalating max_tokens to {new_max_tokens} and retrying in {sleep_time}s...")
                     time.sleep(sleep_time)
                     continue
-            if os.getenv("GEMINI_API_KEY") and current_model != "gemini-3.5-flash":
-                print(f"  Warning: Parsing/truncation error on custom proxy ({exc}) and max_tokens limit reached. Switching fallback to Gemini API (gemini-3.5-flash)...")
+            if current_model == "qwen/qwen3.5-397b-a17b":
+                print(f"  Warning: Parsing/truncation error on Qwen ({exc}) and max_tokens limit reached. Switching fallback to Llama model (meta/llama-4-maverick-17b-128e-instruct)...")
+                current_model = "meta/llama-4-maverick-17b-128e-instruct"
+                payload["model"] = "meta/llama-4-maverick-17b-128e-instruct"
+                continue
+            elif current_model == "meta/llama-4-maverick-17b-128e-instruct" and os.getenv("GEMINI_API_KEY"):
+                print(f"  Warning: Parsing/truncation error on Llama ({exc}) and max_tokens limit reached. Switching fallback to Gemini API (gemini-3.5-flash)...")
                 current_model = "gemini-3.5-flash"
                 payload["model"] = "gemini-3.5-flash"
                 endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
                 config = Config(
                     base_url="https://generativelanguage.googleapis.com/v1beta/openai",
                     model="gemini-3.5-flash",
-                    api_key=os.getenv("GEMINI_API_KEY"),
+                    api_key=os.getenv("GEMINI_API_KEY") or "",
                     temperature=config.temperature,
                     top_p=config.top_p,
                     max_tokens=payload["max_tokens"],
