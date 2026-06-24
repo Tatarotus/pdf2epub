@@ -358,14 +358,76 @@ def spine_entry_for_page(book: dict[str, Any], page_number: int) -> dict[str, An
     return current
 
 
-def expected_folio(book: dict[str, Any], entry: dict[str, Any], page_number: int) -> int | None:
+def expected_folio(book: dict[str, Any], entry: dict[str, Any], page_number: int) -> str | int | None:
+    import re
     printed = entry.get("first_page_printed")
-    if printed is not None:
-        return int(printed) + (page_number - int(entry.get("first_page", page_number)))
-    first_visible = book.get("conventions", {}).get("first_page_number_visible")
-    if first_visible is None:
+    if printed is None:
+        first_visible = book.get("conventions", {}).get("first_page_number_visible")
+        if first_visible is None:
+            return None
         return None
-    return None
+
+    printed_str = str(printed).strip()
+    if not printed_str:
+        return None
+
+    try:
+        offset = page_number - int(entry.get("first_page", page_number))
+    except (ValueError, TypeError):
+        offset = 0
+
+    # 1. Try to parse as integer directly
+    try:
+        return int(printed_str) + offset
+    except ValueError:
+        pass
+
+    # 2. Try to parse with prefix + digits (e.g., A-67, App-1)
+    match = re.search(r'^(.*?)(\d+)$', printed_str)
+    if match:
+        prefix = match.group(1)
+        num_str = match.group(2)
+        try:
+            new_num = int(num_str) + offset
+            return f"{prefix}{new_num}"
+        except ValueError:
+            pass
+
+    # 3. Try to parse as Roman numeral
+    if re.match(r'^[ivxlcdm]+$', printed_str, re.IGNORECASE):
+        def parse_roman(roman: str) -> int | None:
+            roman = roman.upper()
+            roman_dict = {'I':1, 'V':5, 'X':10, 'L':50, 'C':100, 'D':500, 'M':1000}
+            val = 0
+            for i in range(len(roman)):
+                if roman[i] not in roman_dict:
+                    return None
+                if i > 0 and roman_dict[roman[i]] > roman_dict[roman[i-1]]:
+                    val += roman_dict[roman[i]] - 2 * roman_dict[roman[i-1]]
+                else:
+                    val += roman_dict[roman[i]]
+            return val
+
+        def int_to_roman(num: int, lowercase: bool = False) -> str:
+            val = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+            syb = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+            roman_num = ''
+            i = 0
+            while num > 0:
+                for _ in range(num // val[i]):
+                    roman_num += syb[i]
+                    num -= val[i]
+                i += 1
+            return roman_num.lower() if lowercase else roman_num
+
+        val = parse_roman(printed_str)
+        if val is not None:
+            new_val = val + offset
+            if new_val > 0:
+                return int_to_roman(new_val, lowercase=printed_str.islower())
+
+    # Fallback to returning original printed_str if we can't parse it
+    return printed_str
 
 
 def page_kind_hint(entry: dict[str, Any], page_number: int) -> str:
